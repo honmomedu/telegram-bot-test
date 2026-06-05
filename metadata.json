@@ -1,0 +1,6 @@
+{
+  "name": "Telegraf Serverless Bot",
+  "description": "A Telegram bot integration built with Telegraf deployed as a serverless function.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
