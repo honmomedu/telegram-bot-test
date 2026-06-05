@@ -1,4 +1,4 @@
-import { Telegraf, Context } from 'telegraf';
+import { Telegraf, Context, Markup } from 'telegraf';
 import { NextRequest, NextResponse } from 'next/server';
 
 // Initialize the Telegram Bot. Use a fallback token to prevent initialization crashes during previews.
@@ -8,7 +8,21 @@ const ADMIN_GROUP_ID = process.env.TELEGRAM_ADMIN_GROUP_ID || '';
 
 // Basic Commands & Auto-Replies
 bot.start((ctx) => {
-  ctx.reply('សួស្តី! សូមស្វាគមន៍មកកាន់ Bot របស់យើង។ សូមវាយបញ្ចូនពាក្យ ឬសំណួររបស់អ្នកនៅទីនេះរូម Admin នឹងឆ្លើយតប។');
+  ctx.reply(
+    'សួស្តី! សូមស្វាគមន៍មកកាន់ Bot របស់យើង។ តើអ្នកចង់ឲ្យខ្ញុំជួយអ្នកពីអ្វីខ្លះថ្ងៃនេះ?',
+    Markup.inlineKeyboard([
+      [Markup.button.callback('ℹ️ អំពីយើង', 'about_us'), Markup.button.callback('🛠 សេវាកម្ម', 'services')],
+      [Markup.button.url('🌐 ចូលទៅកាន់វិបសាយ', 'https://google.com')]
+    ])
+  );
+});
+
+bot.action('about_us', (ctx) => {
+  ctx.reply('យើងផ្តោតលើការផ្តល់ជូនដំណោះស្រាយបច្ចេកវិទ្យាដ៏ល្អបំផុត។ 🚀');
+});
+
+bot.action('services', (ctx) => {
+  ctx.reply('យើងផ្តល់ជូនសេវាកម្មដូចជា៖\n- បង្កើត Telegram Bot\n- បង្កើត Website\n- រៀបចំ AI Integration');
 });
 
 bot.help((ctx) => {

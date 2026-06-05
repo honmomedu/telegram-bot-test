@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, FileCode, CheckCircle2, Bot, Globe, Layers } from 'lucide-react';
+import { Terminal, FileCode, CheckCircle2, Bot, Globe, Layers, BookOpen } from 'lucide-react';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -56,15 +56,25 @@ export default function TelegramBotDocs() {
   }
 }`;
 
-  const botJsCode = `const { Telegraf } = require('telegraf');
+  const botJsCode = `const { Telegraf, Markup } = require('telegraf');
 
 // Initialize the Telegram Bot
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 const ADMIN_GROUP_ID = process.env.TELEGRAM_ADMIN_GROUP_ID;
 
-// Basic Commands & Replies
+// Basic Commands & Replies with Buttons
 bot.start((ctx) => {
-  ctx.reply('សួស្តី! សូមស្វាគមន៍។ សូមឆាតមកទីនេះ Admin នឹងតបទៅវិញ។');
+  ctx.reply(
+    'សួស្តី! សូមស្វាគមន៍មកកាន់ Bot របស់យើង។',
+    Markup.inlineKeyboard([
+      [Markup.button.callback('ℹ️ អំពីយើង', 'about')],
+      [Markup.button.url('🌐 ចូលទៅកាន់វិបសាយ', 'https://google.com')]
+    ])
+  );
+});
+
+bot.action('about', (ctx) => {
+  ctx.reply('យើងជាក្រុមអ្នកអភិវឌ្ឍន៍ជំនាញ។ 🚀');
 });
 
 bot.hears(['សួស្តី', 'hi', 'hello'], (ctx) => {
@@ -223,6 +233,30 @@ module.exports = async (req, res) => {
             </ol>
             <div className="mt-6 p-4 bg-orange-50 border border-orange-100 rounded-lg text-orange-800 shadow-sm">
               <strong className="font-semibold">Note on Broadcasting:</strong> Sending a <code className="bg-orange-100 px-1 py-0.5 rounded border border-orange-200">/broadcast</code> to all historical users requires persisting their IDs outside memory (since serverless functions shut down). We highly recommend attaching Vercel KV or a Postgres database to store the User IDs when they start using the bot.
+            </div>
+          </div>
+        </section>
+
+        {/* 5. Document / AI Knowledge Base Note */}
+        <section className="rounded-xl border bg-white p-6 sm:p-8 shadow-sm">
+          <SectionHeading title="5. Adding Documents for AI Learning (Knowledge Base)" icon={BookOpen} />
+          <div className="space-y-4 text-[13px] text-slate-600 leading-relaxed">
+            <p>
+              ដោយសារតែរចនាសម្ព័ន្ធរបស់កម្មវិធីនេះជា <strong>Serverless</strong> នៅលើ Vercel, ការដាក់ឯកសារដើម្បីឲ្យ Bot រៀន (AI Knowledge Base) មានជម្រើស ២ សំខាន់ៗ៖
+            </p>
+            <div className="space-y-4 mt-4">
+              <div className="p-4 rounded-lg border border-slate-200 bg-slate-50">
+                <h4 className="font-semibold text-slate-800 text-sm mb-1">១. ឯកសារទំហំតូច (Static Text/JSON / System Prompts)</h4>
+                <p>
+                  អ្នកអាចបង្កើត Folder មួយឈ្មោះថា <code className="bg-slate-200 text-slate-700 px-1 py-0.5 rounded text-xs border border-slate-300">knowledge/</code> នៅក្នុង Project។ ដាក់ឯកសារជាទម្រង់ <code className="bg-slate-200 text-slate-700 px-1 py-0.5 rounded text-xs border border-slate-300">.txt</code> ឬ <code className="bg-slate-200 text-slate-700 px-1 py-0.5 rounded text-xs border border-slate-300">.json</code> រួចអានឯកសារនោះដោយប្រើប្រាស់ <code className="bg-slate-200 text-slate-700 px-1 py-0.5 rounded text-xs border border-slate-300">fs.readFileSync</code> ហើយភ្ជាប់វាទៅកាន់ AI (ដូចជា Google Gemini API) ដើម្បីឲ្យវាឆ្លើយតបយោងតាមឯកសារនោះ។
+                </p>
+              </div>
+              <div className="p-4 rounded-lg border border-slate-200 bg-slate-50">
+                <h4 className="font-semibold text-slate-800 text-sm mb-1">២. ឯកសារធំៗ ឬច្រើន (PDFs, Docs) - ប្រើប្រាស់ RAG</h4>
+                <p>
+                  ប្រសិនបើឯកសារមានច្រើន អ្នកមិនអាចទុកវានៅក្នុងកូដបានទេ។ អ្នកត្រូវបំប្លែងឯកសារទាំងនោះទៅជា Vectors (Embeddings) ហើយរក្សាទុកទៅក្នុង Vector Database (ឧទាហរណ៍៖ Pinecone, Supabase pgvector ឬ Firebase Extensions)។ ពេលអ្នកប្រើសួរសំណួរ, Bot នឹងស្វែងរកព័ត៌មានពាក់ព័ន្ធពី Database រួចទើបបញ្ជូនឲ្យ Gemini បង្កើតចម្លើយចេញមក។
+                </p>
+              </div>
             </div>
           </div>
         </section>
