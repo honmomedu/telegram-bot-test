@@ -63,8 +63,8 @@ const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 const ADMIN_GROUP_ID = process.env.TELEGRAM_ADMIN_GROUP_ID;
 
 // Basic Commands & Replies with Buttons
-bot.start((ctx) => {
-  ctx.reply(
+bot.start(async (ctx) => {
+  await ctx.reply(
     'សួស្តី! សូមស្វាគមន៍មកកាន់ Bot របស់យើង។',
     Markup.inlineKeyboard([
       [Markup.button.callback('ℹ️ អំពីយើង', 'about')],
@@ -73,12 +73,13 @@ bot.start((ctx) => {
   );
 });
 
-bot.action('about', (ctx) => {
-  ctx.reply('យើងជាក្រុមអ្នកអភិវឌ្ឍន៍ជំនាញ។ 🚀');
+bot.action('about', async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.reply('យើងជាក្រុមអ្នកអភិវឌ្ឍន៍ជំនាញ។ 🚀');
 });
 
-bot.hears(['សួស្តី', 'hi', 'hello'], (ctx) => {
-  ctx.reply('សួស្តី! តើមានអ្វីឱ្យខ្ញុំជួយទេថ្ងៃនេះ?');
+bot.hears(['សួស្តី', 'hi', 'hello'], async (ctx) => {
+  await ctx.reply('សួស្តី! តើមានអ្វីឱ្យខ្ញុំជួយទេថ្ងៃនេះ?');
 });
 
 bot.on('text', async (ctx) => {

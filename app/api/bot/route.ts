@@ -7,8 +7,8 @@ const bot = new Telegraf(token || '123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11');
 const ADMIN_GROUP_ID = process.env.TELEGRAM_ADMIN_GROUP_ID || '';
 
 // Basic Commands & Auto-Replies
-bot.start((ctx) => {
-  ctx.reply(
+bot.start(async (ctx) => {
+  await ctx.reply(
     'សួស្តី! សូមស្វាគមន៍មកកាន់ Bot របស់យើង។ តើអ្នកចង់ឲ្យខ្ញុំជួយអ្នកពីអ្វីខ្លះថ្ងៃនេះ?',
     Markup.inlineKeyboard([
       [Markup.button.callback('ℹ️ អំពីយើង', 'about_us'), Markup.button.callback('🛠 សេវាកម្ម', 'services')],
@@ -17,20 +17,22 @@ bot.start((ctx) => {
   );
 });
 
-bot.action('about_us', (ctx) => {
-  ctx.reply('យើងផ្តោតលើការផ្តល់ជូនដំណោះស្រាយបច្ចេកវិទ្យាដ៏ល្អបំផុត។ 🚀');
+bot.action('about_us', async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.reply('យើងផ្តោតលើការផ្តល់ជូនដំណោះស្រាយបច្ចេកវិទ្យាដ៏ល្អបំផុត។ 🚀');
 });
 
-bot.action('services', (ctx) => {
-  ctx.reply('យើងផ្តល់ជូនសេវាកម្មដូចជា៖\n- បង្កើត Telegram Bot\n- បង្កើត Website\n- រៀបចំ AI Integration');
+bot.action('services', async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.reply('យើងផ្តល់ជូនសេវាកម្មដូចជា៖\n- បង្កើត Telegram Bot\n- បង្កើត Website\n- រៀបចំ AI Integration');
 });
 
-bot.help((ctx) => {
-  ctx.reply('ផ្ញើសារអ្វីក៏បានមកកាន់ខ្ញុំ Admin នឹងទាក់ទងទៅអ្នកវិញនៅពេលក្រោយ។');
+bot.help(async (ctx) => {
+  await ctx.reply('ផ្ញើសារអ្វីក៏បានមកកាន់ខ្ញុំ Admin នឹងទាក់ទងទៅអ្នកវិញនៅពេលក្រោយ។');
 });
 
-bot.hears(['សួស្តី', 'hi', 'hello', 'សួរស្ដី'], (ctx) => {
-  ctx.reply('សួស្តី! តើមានអ្វីឱ្យខ្ញុំជួយទេថ្ងៃនេះ?');
+bot.hears(['សួស្តី', 'hi', 'hello', 'សួរស្ដី'], async (ctx) => {
+  await ctx.reply('សួស្តី! តើមានអ្វីឱ្យខ្ញុំជួយទេថ្ងៃនេះ?');
 });
 
 bot.on('text', async (ctx: Context) => {
