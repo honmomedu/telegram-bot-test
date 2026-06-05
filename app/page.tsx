@@ -62,6 +62,15 @@ export default function TelegramBotDocs() {
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 const ADMIN_GROUP_ID = process.env.TELEGRAM_ADMIN_GROUP_ID;
 
+// Basic Commands & Replies
+bot.start((ctx) => {
+  ctx.reply('សួស្តី! សូមស្វាគមន៍។ សូមឆាតមកទីនេះ Admin នឹងតបទៅវិញ។');
+});
+
+bot.hears(['សួស្តី', 'hi', 'hello'], (ctx) => {
+  ctx.reply('សួស្តី! តើមានអ្វីឱ្យខ្ញុំជួយទេថ្ងៃនេះ?');
+});
+
 bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id.toString();
   const text = ctx.message.text;

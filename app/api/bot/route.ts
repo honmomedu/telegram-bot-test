@@ -6,6 +6,19 @@ const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new Telegraf(token || '123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11');
 const ADMIN_GROUP_ID = process.env.TELEGRAM_ADMIN_GROUP_ID || '';
 
+// Basic Commands & Auto-Replies
+bot.start((ctx) => {
+  ctx.reply('សួស្តី! សូមស្វាគមន៍មកកាន់ Bot របស់យើង។ សូមវាយបញ្ចូនពាក្យ ឬសំណួររបស់អ្នកនៅទីនេះរូម Admin នឹងឆ្លើយតប។');
+});
+
+bot.help((ctx) => {
+  ctx.reply('ផ្ញើសារអ្វីក៏បានមកកាន់ខ្ញុំ Admin នឹងទាក់ទងទៅអ្នកវិញនៅពេលក្រោយ។');
+});
+
+bot.hears(['សួស្តី', 'hi', 'hello', 'សួរស្ដី'], (ctx) => {
+  ctx.reply('សួស្តី! តើមានអ្វីឱ្យខ្ញុំជួយទេថ្ងៃនេះ?');
+});
+
 bot.on('text', async (ctx: Context) => {
   if (!ctx.message || !('text' in ctx.message)) return;
 
