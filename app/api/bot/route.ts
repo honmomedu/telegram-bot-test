@@ -1,10 +1,33 @@
 import { Telegraf, Context, Markup } from 'telegraf';
 import { NextRequest, NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabase';
 
 // Initialize the Telegram Bot. Use a fallback token to prevent initialization crashes during previews.
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new Telegraf(token || '123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11');
 const ADMIN_GROUP_ID = process.env.TELEGRAM_ADMIN_GROUP_ID || '';
+
+// Middleware to automatically save users in Supabase
+bot.use(async (ctx, next) => {
+  if (ctx.from) {
+    const { id, first_name, last_name, username } = ctx.from;
+    
+    // Skip DB update if Supabase isn't configured yet
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      try {
+        await supabase.from('telegram_users').upsert({
+          telegram_id: id,
+          first_name: first_name || null,
+          last_name: last_name || null,
+          username: username || null
+        }, { onConflict: 'telegram_id' });
+      } catch (err) {
+        console.error('Supabase DB Error (User tracking):', err);
+      }
+    }
+  }
+  return next();
+});
 
 // Basic Commands & Auto-Replies
 bot.start(async (ctx) => {
@@ -77,8 +100,13 @@ bot.on('text', async (ctx: Context) => {
     const user = ctx.from;
     const report = `New message from ${user?.first_name} ${user?.last_name || ''} (ID: ${user?.id}):\n\n${text}`;
 
-    await bot.telegram.sendMessage(ADMIN_GROUP_ID, report);
-    await ctx.reply('Your message has been sent to the admins. We will reply as soon as possible.');
+    try {
+      await bot.telegram.sendMessage(ADMIN_GROUP_ID, report);
+      await ctx.reply('Your message has been sent to the admins. We will reply as soon as possible.');
+    } catch (err: any) {
+      console.error('Telegram Error:', err.message);
+      await ctx.reply(`បច្ចុប្បន្នមានបញ្ហាទាក់ទងនឹង Admin Group (Chat Not Found)។ សូមប្រាប់ Admin ឱ្យពិនិត្យមើល TELEGRAM_ADMIN_GROUP_ID នៅក្នុង Vercel ឡើងវិញ ។\nError: ${err.message}`);
+    }
   }
 });
 

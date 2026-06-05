@@ -158,6 +158,9 @@ module.exports = async (req, res) => {
             <p className="text-[11px] text-slate-400 max-w-xs text-left sm:text-right">
               A comprehensive guide and code structure for deploying a Telegraf-based webhook bot using Vercel Serverless Functions.
             </p>
+            <a href="/admin" className="text-sm font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 px-4 py-2 mt-2 rounded-lg transition border border-blue-100 flex items-center shadow-sm">
+               &rarr; ចូលទៅកាន់ Admin Dashboard
+            </a>
           </div>
         </header>
 
