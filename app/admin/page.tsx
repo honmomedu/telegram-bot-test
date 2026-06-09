@@ -1,10 +1,12 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Users, AlertCircle, CheckCircle2, ShieldCheck, Settings, Bell, Search, UserPlus, LogOut, Download, QrCode, MapPin, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { Users, AlertCircle, CheckCircle2, ShieldCheck, Settings, Bell, Search, UserPlus, LogOut, Download, QrCode, MapPin, Loader2, RefreshCw, Trash2, BarChart3, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
 const QrGenerator = dynamic(() => import('../../components/QrGenerator'), { ssr: false });
+const ReportsPanel = dynamic(() => import('../../components/ReportsPanel'), { ssr: false });
+const PayrollPanel = dynamic(() => import('../../components/PayrollPanel'), { ssr: false });
 
 interface Employee {
   id?: string;
@@ -36,7 +38,7 @@ function parseCoords(text: string): { lat: string; lng: string } | null {
 }
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'employees' | 'qrcode' | 'settings' | 'system'>('employees');
+  const [activeTab, setActiveTab] = useState<'employees' | 'reports' | 'payroll' | 'qrcode' | 'settings' | 'system'>('employees');
   
   // Settings Tab
   const [telegramToken, setTelegramToken] = useState('');
@@ -288,6 +290,18 @@ export default function AdminDashboard() {
                 <Users size={18} /> គ្រប់គ្រងបុគ្គលិក (Employees)
             </button>
             <button
+                onClick={() => setActiveTab('reports')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'reports' ? 'bg-indigo-600/10 text-indigo-400' : 'hover:bg-slate-800 hover:text-white'}`}
+            >
+                <BarChart3 size={18} /> របាយការណ៍វត្តមាន
+            </button>
+            <button
+                onClick={() => setActiveTab('payroll')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'payroll' ? 'bg-indigo-600/10 text-indigo-400' : 'hover:bg-slate-800 hover:text-white'}`}
+            >
+                <Wallet size={18} /> ប្រាក់ខែ (Payroll)
+            </button>
+            <button
                 onClick={() => setActiveTab('qrcode')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'qrcode' ? 'bg-indigo-600/10 text-indigo-400' : 'hover:bg-slate-800 hover:text-white'}`}
             >
@@ -323,6 +337,8 @@ export default function AdminDashboard() {
           </div>
           <div className="flex gap-2">
              <button onClick={() => setActiveTab('employees')} className={`p-2 rounded ${activeTab === 'employees' ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}><Users size={20}/></button>
+             <button onClick={() => setActiveTab('reports')} className={`p-2 rounded ${activeTab === 'reports' ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}><BarChart3 size={20}/></button>
+             <button onClick={() => setActiveTab('payroll')} className={`p-2 rounded ${activeTab === 'payroll' ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}><Wallet size={20}/></button>
              <button onClick={() => setActiveTab('qrcode')} className={`p-2 rounded ${activeTab === 'qrcode' ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}><QrCode size={20}/></button>
              <button onClick={() => setActiveTab('settings')} className={`p-2 rounded ${activeTab === 'settings' ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}><Bell size={20}/></button>
              <button onClick={() => setActiveTab('system')} className={`p-2 rounded ${activeTab === 'system' ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}><Settings size={20}/></button>
@@ -412,6 +428,10 @@ export default function AdminDashboard() {
                 </div>
             </div>
         )}
+
+        {activeTab === 'reports' && <ReportsPanel />}
+
+        {activeTab === 'payroll' && <PayrollPanel />}
 
         {activeTab === 'qrcode' && <QrGenerator />}
 

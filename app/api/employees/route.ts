@@ -69,6 +69,33 @@ export async function POST(req: Request) {
   }
 }
 
+// PATCH { code, ...fields } -> update an employee (salary, name, dept, active)
+export async function PATCH(req: Request) {
+  try {
+    const b = await req.json();
+    const code = (b.code || '').toString().trim();
+    if (!code) return NextResponse.json({ success: false, error: 'Missing code' }, { status: 400 });
+
+    const patch: Record<string, any> = {};
+    if (b.name != null) patch.name = b.name;
+    if (b.department !== undefined) patch.department = b.department || null;
+    if (b.pay_type != null) patch.pay_type = b.pay_type === 'hourly' ? 'hourly' : 'monthly';
+    if (b.base_salary != null) patch.base_salary = Number(b.base_salary) || 0;
+    if (b.hourly_rate != null) patch.hourly_rate = Number(b.hourly_rate) || 0;
+    if (b.active != null) patch.active = !!b.active;
+
+    if (Object.keys(patch).length === 0) {
+      return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
+    }
+
+    const { data, error } = await supabase.from('employees').update(patch).eq('code', code).select().single();
+    if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true, employee: data });
+  } catch (e: any) {
+    return NextResponse.json({ success: false, error: e?.message }, { status: 500 });
+  }
+}
+
 export async function DELETE(req: Request) {
   try {
     const code = new URL(req.url).searchParams.get('code');

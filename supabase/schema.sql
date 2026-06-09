@@ -77,3 +77,32 @@ CREATE TABLE IF NOT EXISTS attendance (
 
 CREATE INDEX IF NOT EXISTS idx_attendance_code ON attendance(employee_code);
 CREATE INDEX IF NOT EXISTS idx_attendance_created ON attendance(created_at DESC);
+
+-- 005 — Payroll (fields, settings, adjustments) --------------
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS pay_type TEXT DEFAULT 'monthly';
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS base_salary NUMERIC DEFAULT 0;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS hourly_rate NUMERIC DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS payroll_settings (
+  id INTEGER PRIMARY KEY,
+  work_start_time TEXT DEFAULT '08:00',
+  work_end_time TEXT DEFAULT '17:00',
+  late_threshold_min INTEGER DEFAULT 15,
+  standard_days INTEGER DEFAULT 26,
+  late_deduction NUMERIC DEFAULT 0,
+  absent_deduction NUMERIC DEFAULT 0,
+  currency TEXT DEFAULT 'USD',
+  payday INTEGER DEFAULT 28
+);
+INSERT INTO payroll_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS payroll_adjustments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  employee_code TEXT NOT NULL,
+  month TEXT NOT NULL,                       -- 'YYYY-MM'
+  type TEXT NOT NULL,                        -- 'add' | 'deduct'
+  amount NUMERIC NOT NULL,
+  reason TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_adjustments_emp_month ON payroll_adjustments(employee_code, month);
