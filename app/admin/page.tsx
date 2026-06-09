@@ -603,7 +603,7 @@ export default function AdminDashboard() {
                                {sysSaveStatus === 'saving' ? (
                                    <>កំពុងរក្សាទុក...</>
                                ) : (
-                                   <>រក្សាទុុកការកំណត់</>
+                                   <>រក្សាទុកការកំណត់</>
                                )}
                            </button>
                        </div>
