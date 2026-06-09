@@ -450,20 +450,21 @@ export default function App() {
               </div>
             </div>
 
-            {/* Clock Widget */}
-            <div className="relative rounded-3xl p-6 flex flex-col items-center justify-center overflow-hidden bg-slate-900 text-white shadow-card">
-              {/* ambient glows */}
-              <div className="absolute -top-8 -right-8 w-40 h-40 bg-brand-500/30 rounded-full blur-3xl" />
-              <div className="absolute -bottom-10 -left-8 w-40 h-40 bg-violet-500/20 rounded-full blur-3xl" />
-              <div className="flex items-center gap-1.5 text-brand-300 mb-2 relative">
-                <Clock className="w-4 h-4" />
-                <span className="text-[11px] font-semibold uppercase tracking-widest">ម៉ោងបច្ចុប្បន្ន</span>
+            {/* Clock Widget (compact) */}
+            <div className="relative rounded-2xl px-5 py-3.5 flex items-center justify-between overflow-hidden bg-slate-900 text-white shadow-card">
+              {/* ambient glow */}
+              <div className="absolute -top-6 -right-6 w-28 h-28 bg-brand-500/30 rounded-full blur-2xl" />
+              <div className="relative">
+                <div className="flex items-center gap-1.5 text-brand-300 mb-0.5">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-semibold uppercase tracking-widest">ម៉ោងបច្ចុប្បន្ន</span>
+                </div>
+                <div className="text-3xl font-bold tracking-tight font-mono tabular-nums bg-gradient-to-b from-white to-slate-300 bg-clip-text text-transparent">
+                  {isClient ? currentTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--'}
+                </div>
               </div>
-              <div className="text-5xl font-bold tracking-tight font-mono tabular-nums relative bg-gradient-to-b from-white to-slate-300 bg-clip-text text-transparent">
-                {isClient ? currentTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--'}
-              </div>
-              <div className="text-slate-400 mt-2 text-sm font-medium relative">
-                {isClient ? currentTime.toLocaleDateString('km-KH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'កំពុងផ្ទុក...'}
+              <div className="text-right text-slate-400 text-xs font-medium relative leading-tight max-w-[42%]">
+                {isClient ? currentTime.toLocaleDateString('km-KH', { weekday: 'long', day: 'numeric', month: 'long' }) : '...'}
               </div>
             </div>
 
