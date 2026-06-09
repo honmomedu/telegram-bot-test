@@ -51,7 +51,54 @@ bot.action('services', async (ctx) => {
 });
 
 bot.help(async (ctx) => {
-  await ctx.reply('ផ្ញើសារអ្វីក៏បានមកកាន់ខ្ញុំ Admin នឹងទាក់ទងទៅអ្នកវិញនៅពេលក្រោយ។');
+  await ctx.reply(
+    'ពាក្យបញ្ជា៖\n' +
+    '• /link <EmployeeID> — ភ្ជាប់ Telegram របស់អ្នកជាមួយលេខបុគ្គលិក ដើម្បីទទួលសារវត្តមានផ្ទាល់\n' +
+    '• /start — បើកប្រព័ន្ធស្កេនវត្តមាន'
+  );
+});
+
+// /link <EmployeeID> — connect this Telegram account to an employee record
+bot.command('link', async (ctx) => {
+  const parts = ctx.message.text.split(/\s+/);
+  const code = (parts[1] || '').trim();
+  if (!code) {
+    await ctx.reply('សូមផ្ញើ៖ /link <លេខបុគ្គលិក>\nឧ. /link EMP-001');
+    return;
+  }
+
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    await ctx.reply('ប្រព័ន្ធកំពុងថែទាំ (Database មិនទាន់កំណត់)។');
+    return;
+  }
+
+  try {
+    const { data: emp } = await supabase
+      .from('employees')
+      .select('code, name')
+      .eq('code', code)
+      .single();
+
+    if (!emp) {
+      await ctx.reply(`រកលេខបុគ្គលិក "${code}" មិនឃើញទេ។ សូមពិនិត្យ ឬទាក់ទង Admin។`);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('employees')
+      .update({ telegram_id: ctx.from.id })
+      .eq('code', code);
+
+    if (error) {
+      await ctx.reply('មានបញ្ហាក្នុងការភ្ជាប់។ សូមសាកល្បងម្ដងទៀត។');
+      return;
+    }
+
+    await ctx.reply(`✅ ភ្ជាប់ជោគជ័យ!\n\n👤 ${emp.name} (${emp.code})\nចាប់ពីពេលនេះ អ្នកនឹងទទួលសារកំណត់ត្រាវត្តមានផ្ទាល់នៅទីនេះ។`);
+  } catch (err) {
+    console.error('link error:', err);
+    await ctx.reply('មានបញ្ហាក្នុងការភ្ជាប់។ សូមសាកល្បងម្ដងទៀត។');
+  }
 });
 
 bot.hears(['សួស្តី', 'hi', 'hello', 'សួរស្ដី'], async (ctx) => {

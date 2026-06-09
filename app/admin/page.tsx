@@ -1,24 +1,21 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Users, AlertCircle, CheckCircle2, ShieldCheck, Settings, Bell, Search, UserPlus, LogOut, Download, QrCode, MapPin } from 'lucide-react';
+import { Users, AlertCircle, CheckCircle2, ShieldCheck, Settings, Bell, Search, UserPlus, LogOut, Download, QrCode, MapPin, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
 const QrGenerator = dynamic(() => import('../../components/QrGenerator'), { ssr: false });
 
 interface Employee {
-  id: string;
+  id?: string;
+  code: string;
   name: string;
-  department: string;
-  status: 'Active' | 'Inactive';
-  lastActive: string;
+  department?: string | null;
+  telegram_id?: number | null;
+  active?: boolean;
+  enrolled?: boolean;
+  created_at?: string;
 }
-
-const mockEmployees: Employee[] = [
-  { id: 'EMP-001', name: 'Sok San', department: 'IT', status: 'Active', lastActive: '2026-06-09T08:30:00' },
-  { id: 'EMP-002', name: 'Chea Roth', department: 'HR', status: 'Active', lastActive: '2026-06-08T17:15:00' },
-  { id: 'EMP-003', name: 'Nita Ly', department: 'Sales', status: 'Inactive', lastActive: '2026-06-01T10:00:00' },
-];
 
 // Pull lat/lng out of almost any Google Maps URL or a directly-pasted
 // "lat, lng" pair. Returns null when nothing usable is found.
@@ -55,6 +52,81 @@ export default function AdminDashboard() {
   // Auth State
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [authMsg, setAuthMsg] = useState('កំពុងផ្ទៀងផ្ទាត់សិទ្ធិ (Verifying Admin)...');
+
+  // Employees
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [empLoading, setEmpLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [form, setForm] = useState({ code: '', name: '', department: '' });
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  const loadEmployees = async () => {
+    setEmpLoading(true);
+    try {
+      const res = await fetch('/api/employees');
+      const data = await res.json();
+      setEmployees(Array.isArray(data.employees) ? data.employees : []);
+    } catch {
+      /* ignore */
+    } finally {
+      setEmpLoading(false);
+    }
+  };
+
+  useEffect(() => { loadEmployees(); }, []);
+
+  const addEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAdding(true);
+    setAddError(null);
+    try {
+      const res = await fetch('/api/employees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setAddError(data.error || 'បន្ថែមមិនបាន');
+      } else {
+        setForm({ code: '', name: '', department: '' });
+        await loadEmployees();
+      }
+    } catch {
+      setAddError('មានបញ្ហាបណ្ដាញ');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const deleteEmployee = async (code: string) => {
+    if (!confirm(`លុបបុគ្គលិក ${code}? ទិន្នន័យមុខ (face) របស់គាត់ក៏នឹងលុបដែរ។`)) return;
+    try {
+      await fetch(`/api/employees?code=${encodeURIComponent(code)}`, { method: 'DELETE' });
+      await loadEmployees();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const exportCsv = () => {
+    const rows = [['Employee ID', 'Name', 'Department', 'Active', 'Face Enrolled', 'Telegram Linked']];
+    employees.forEach((e) => rows.push([
+      e.code, e.name, e.department || '', e.active === false ? 'No' : 'Yes',
+      e.enrolled ? 'Yes' : 'No', e.telegram_id ? 'Yes' : 'No',
+    ]));
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'employees.csv';
+    a.click();
+  };
+
+  const filteredEmployees = employees.filter((e) =>
+    `${e.code} ${e.name} ${e.department || ''}`.toLowerCase().includes(search.toLowerCase()),
+  );
 
   useEffect(() => {
      // Admin verification using Telegram WebApp data
@@ -211,61 +283,77 @@ export default function AdminDashboard() {
                 <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                    <div>
                        <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">គ្រប់គ្រងបុគ្គលិក</h2>
-                       <p className="text-slate-500 mt-1">គ្រប់គ្រងគណនី និងមើលប្រវត្តិវត្តមានបុគ្គលិក</p>
+                       <p className="text-slate-500 mt-1">បង្កើតលេខបុគ្គលិក (Employee ID) → បុគ្គលិក activate + ចុះឈ្មោះមុខ ដោយខ្លួនឯង</p>
                    </div>
-                   <div className="flex gap-3">
-                       <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition shadow-sm">
-                           <Download size={16} /> Export CSV
-                       </button>
-                       <button className="flex items-center gap-2 px-4 py-2 brand-gradient hover:opacity-90 text-white rounded-xl text-sm font-semibold transition shadow-glow-brand">
-                           <UserPlus size={16} /> បន្ថែមបុគ្គលិកថ្មី
-                       </button>
-                   </div>
+                   <button onClick={exportCsv} className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition shadow-sm">
+                       <Download size={16} /> Export CSV
+                   </button>
                 </header>
+
+                {/* Add employee form */}
+                <form onSubmit={addEmployee} className="bg-white rounded-2xl shadow-card border border-slate-100 p-5">
+                    <p className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2"><UserPlus size={16} className="text-brand-600" /> បន្ថែមបុគ្គលិកថ្មី</p>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="Employee ID (ឧ. EMP-001)" className="px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:outline-none transition text-sm font-mono" />
+                        <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ឈ្មោះ" className="px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:outline-none transition text-sm" />
+                        <input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="ផ្នែក (ស្រេចចិត្ត)" className="px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:outline-none transition text-sm" />
+                        <button type="submit" disabled={adding} className="flex items-center justify-center gap-2 px-4 py-2.5 brand-gradient hover:opacity-90 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition shadow-glow-brand">
+                            {adding ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />} បន្ថែម
+                        </button>
+                    </div>
+                    {addError && <p className="text-sm text-red-600 mt-2 flex items-center gap-1.5"><AlertCircle size={14} /> {addError}</p>}
+                </form>
 
                 <div className="bg-white rounded-2xl shadow-card border border-slate-100 overflow-hidden">
                     <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
                         <div className="relative w-full max-w-sm">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                            <input type="text" placeholder="ស្វែងរកឈ្មោះ ឬអត្តលេខ..." className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-600 focus:outline-none transition" />
+                            <input value={search} onChange={(e) => setSearch(e.target.value)} type="text" placeholder="ស្វែងរកឈ្មោះ ឬអត្តលេខ..." className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-600 focus:outline-none transition" />
                         </div>
+                        <button onClick={loadEmployees} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition"><RefreshCw size={16} className={empLoading ? 'animate-spin' : ''} /></button>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-semibold bg-slate-50">
-                                    <th className="p-4">អត្តលេខ</th>
-                                    <th className="p-4">ឈ្មោះបុគ្គលិក</th>
+                                    <th className="p-4">Employee ID</th>
+                                    <th className="p-4">ឈ្មោះ</th>
                                     <th className="p-4">ផ្នែក</th>
-                                    <th className="p-4">ស្ថានភាព</th>
-                                    <th className="p-4 text-right">សកម្មភាពចុងក្រោយ</th>
+                                    <th className="p-4">មុខ (Face)</th>
+                                    <th className="p-4">Telegram</th>
+                                    <th className="p-4 text-right"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-sm">
-                                {mockEmployees.map((emp) => (
-                                    <tr key={emp.id} className="hover:bg-slate-50/50 transition">
-                                        <td className="p-4 font-mono text-slate-500">{emp.id}</td>
+                                {empLoading ? (
+                                    <tr><td colSpan={6} className="p-10 text-center text-slate-400"><Loader2 className="w-6 h-6 animate-spin inline" /></td></tr>
+                                ) : filteredEmployees.length === 0 ? (
+                                    <tr><td colSpan={6} className="p-10 text-center text-slate-400">មិនទាន់មានបុគ្គលិក — បន្ថែមនៅខាងលើ</td></tr>
+                                ) : filteredEmployees.map((emp) => (
+                                    <tr key={emp.code} className="hover:bg-slate-50/50 transition">
+                                        <td className="p-4 font-mono text-slate-500">{emp.code}</td>
                                         <td className="p-4 font-medium text-slate-900">{emp.name}</td>
-                                        <td className="p-4 text-slate-600">{emp.department}</td>
+                                        <td className="p-4 text-slate-600">{emp.department || '—'}</td>
                                         <td className="p-4">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${emp.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'}`}>
-                                                {emp.status}
+                                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${emp.enrolled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'}`}>
+                                                {emp.enrolled ? <><CheckCircle2 size={12} /> ចុះរួច</> : 'មិនទាន់'}
                                             </span>
                                         </td>
-                                        <td className="p-4 text-right text-slate-500">
-                                            {new Date(emp.lastActive).toLocaleString('km-KH')}
+                                        <td className="p-4">
+                                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${emp.telegram_id ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                                                {emp.telegram_id ? 'ភ្ជាប់' : 'មិនទាន់'}
+                                            </span>
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            <button onClick={() => deleteEmployee(emp.code)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"><Trash2 size={16} /></button>
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
-                    <div className="p-4 border-t border-slate-200 bg-slate-50/50 text-xs text-slate-500 flex justify-between">
-                        <span>បង្ហាញមុខបុគ្គលិកចំនួន 3 នាក់</span>
-                        <div className="flex gap-2">
-                             <button className="px-2 py-1 border border-slate-200 rounded disabled:opacity-50" disabled>« Previous</button>
-                             <button className="px-2 py-1 border border-slate-200 rounded disabled:opacity-50" disabled>Next »</button>
-                        </div>
+                    <div className="p-4 border-t border-slate-200 bg-slate-50/50 text-xs text-slate-500">
+                        បុគ្គលិកសរុប {employees.length} នាក់ · ភ្ជាប់ Telegram ៖ ផ្ញើ <code className="bg-slate-100 px-1 rounded">/link &lt;EmployeeID&gt;</code> ទៅ Bot
                     </div>
                 </div>
             </div>

@@ -53,6 +53,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, savedToCloud: false, reason: error.message });
     }
 
+    // Mark the employee as enrolled (best effort).
+    await supabase.from('employees').update({ enrolled: true }).eq('code', userId).then(() => {}, () => {});
+
     return NextResponse.json({ success: true, savedToCloud: true });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });

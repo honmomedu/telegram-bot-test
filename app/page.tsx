@@ -5,11 +5,13 @@ import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'motion/react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import Link from 'next/link';
-import { getFaceDescriptor, faceDistance, MATCH_THRESHOLD, matchConfidence } from '@/lib/face';
+import { getFaceDescriptor, matchConfidence } from '@/lib/face';
 import { FaceEnrollment, resolveEnrollment } from '@/lib/faceStore';
+import { ActiveEmployee, getActiveEmployee, clearActiveEmployee } from '@/lib/employeeStore';
 
 const MapComponent = dynamic(() => import('../components/Map'), { ssr: false });
 const FaceEnroll = dynamic(() => import('../components/FaceEnroll'), { ssr: false });
+const ActivateGate = dynamic(() => import('../components/ActivateGate'), { ssr: false });
 
 // Default Office Coordinates (Central Phnom Penh)
 const DEFAULT_OFFICE_COORDS = { lat: 11.5564, lng: 104.9282 }; 
@@ -52,44 +54,52 @@ export default function App() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   
-  // Mock History
+  // History (attendance records from the server)
   const [history, setHistory] = useState<any[]>([]);
   const [isClient, setIsClient] = useState(false);
-  const [tgUser, setTgUser] = useState<{name: string, id: string | null}>({name: 'ភ្ញៀវអនាមិក (Guest)', id: null});
+
+  // Active employee identity (device-level login by Employee ID)
+  const [employee, setEmployee] = useState<ActiveEmployee | null>(null);
+  const [activationChecked, setActivationChecked] = useState(false);
 
   // Face enrollment & verification
   const [enrollment, setEnrollment] = useState<FaceEnrollment | null>(null);
   const [showEnroll, setShowEnroll] = useState(false);
   const [faceStatus, setFaceStatus] = useState<'idle' | 'verifying' | 'matched' | 'failed'>('idle');
   const [faceConfidence, setFaceConfidence] = useState<number | null>(null);
+  // The employee identified by the face during a check-in (auto-match)
+  const [matchedEmployee, setMatchedEmployee] = useState<{ code: string; name: string } | null>(null);
 
   // QR secrets (admin-generated, validated server-side config)
   const [validQrSecrets, setValidQrSecrets] = useState<string[]>(['SECURE_ATTEND_OFFICE_QR_2026']);
 
-  const currentUserId = tgUser.id ? tgUser.id.toString() : 'guest';
+  const currentUserId = employee?.code || 'guest';
 
-  // Real-time clock update & History Load
+  // Load attendance history for the active employee from the server
+  const loadHistory = useCallback((code: string) => {
+    if (!code || code === 'guest') return;
+    fetch(`/api/attendance?code=${encodeURIComponent(code)}&limit=50`)
+      .then((res) => res.json())
+      .then((data) => { if (Array.isArray(data.records)) setHistory(data.records); })
+      .catch(() => {});
+  }, []);
+
+  // Real-time clock update & initial data load
   useEffect(() => {
     setIsClient(true);
-    
-    // Telegram Web App init
-    if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) {
-        const user = (window as any).Telegram.WebApp.initDataUnsafe.user;
-        setTgUser({
-           name: `${user.first_name} ${user.last_name || ''}`.trim(),
-           id: user.id
-        });
-        (window as any).Telegram.WebApp.ready();
-    }
-    
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    
-    try {
-      const storedHistory = localStorage.getItem('secure_attend_history');
-      if (storedHistory) {
-        setHistory(JSON.parse(storedHistory));
-      }
 
+    // Telegram Web App ready (identity comes from Employee ID, not Telegram)
+    if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
+        (window as any).Telegram.WebApp.ready?.();
+    }
+
+    // Restore the activated employee on this device
+    setEmployee(getActiveEmployee());
+    setActivationChecked(true);
+
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+
+    try {
       // Load office coordinates from API
       fetch('/api/office-config').then(res => res.json()).then(data => {
         if (data.lat && data.lng) {
@@ -116,13 +126,14 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Load the user's face enrollment (cloud-first, falls back to local)
+  // Load the employee's face enrollment + attendance history once activated
   useEffect(() => {
-    if (!isClient) return;
-    resolveEnrollment(currentUserId)
+    if (!isClient || !employee) return;
+    resolveEnrollment(employee.code)
       .then((rec) => setEnrollment(rec))
       .catch(() => {});
-  }, [isClient, currentUserId]);
+    loadHistory(employee.code);
+  }, [isClient, employee, loadHistory]);
 
   // Strict Geolocation fetching
   const checkLocation = useCallback(() => {
@@ -226,22 +237,40 @@ export default function App() {
     const photoData = canvas.toDataURL('image/jpeg', 0.85);
     setPhoto(photoData);
 
-    // --- AI face verification against the enrolled descriptor ---
+    // --- AI face auto-match: the server identifies WHO this face is ---
     setFaceStatus('verifying');
     setFaceConfidence(null);
+    setMatchedEmployee(null);
     try {
       const desc = await getFaceDescriptor(aiCanvas);
       stopCamera();
       if (!desc) {
         setFaceStatus('failed');
-        setFaceConfidence(null);
         return;
       }
-      if (enrollment) {
-        const dist = faceDistance(desc, enrollment.descriptor);
-        setFaceConfidence(matchConfidence(dist));
-        setFaceStatus(dist < MATCH_THRESHOLD ? 'matched' : 'failed');
+      const res = await fetch('/api/attendance/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ descriptor: Array.from(desc) }),
+      });
+      const data = await res.json();
+      if (data.matched) {
+        setMatchedEmployee({ code: data.code, name: data.name });
+        setFaceConfidence(data.confidence ?? null);
+        setFaceStatus('matched');
       } else {
+        // Fallback: match locally against this device's own enrollment
+        // (covers the case where the cloud table isn't populated yet).
+        if (enrollment) {
+          const localMod = await import('@/lib/face');
+          const dist = localMod.faceDistance(desc, enrollment.descriptor);
+          if (dist < localMod.MATCH_THRESHOLD) {
+            setMatchedEmployee({ code: employee?.code || enrollment.userId, name: employee?.name || enrollment.name });
+            setFaceConfidence(matchConfidence(dist));
+            setFaceStatus('matched');
+            return;
+          }
+        }
         setFaceStatus('failed');
       }
     } catch {
@@ -255,55 +284,53 @@ export default function App() {
     openCameraFlow(actionType!);
   };
 
-  const submitAttendance = async (methodParam: 'camera' | 'qr' | any = 'camera', payloadData: string | null = null) => {
-    const method = methodParam === 'qr' ? 'qr' : 'camera';
-    const actType = method === 'camera' ? actionType : qrActionType;
+  const submitAttendance = async (methodParam: 'camera' | 'qr' | any = 'camera') => {
+    const method = methodParam === 'qr' ? 'qr' : 'face';
+    const actType = method === 'face' ? actionType : qrActionType;
     if (!actType) return;
-    if (method === 'camera' && !photo && !payloadData) return;
-    
-    // Simulate current logged in user
-    const currentEmployeeName = tgUser.name; 
 
-    const newEntry = {
-      id: Date.now(),
-      type: actType,
-      time: new Date().toISOString(),
-      distance: distance?.toFixed(1) || '0',
-      photo: method === 'camera' ? (payloadData || photo) : null,
-      method: method
-    };
-    
-    const updatedHistory = [newEntry, ...history].slice(0, 50); // Keep last 50 entries
-    setHistory(updatedHistory);
-    
+    // Resolve identity: face -> auto-matched employee; QR -> device employee.
+    const id = method === 'face' ? matchedEmployee : (employee ? { code: employee.code, name: employee.name } : null);
+    if (!id) return;
+
     try {
-      localStorage.setItem('secure_attend_history', JSON.stringify(updatedHistory));
-      
-      // Notify Telegram
-      await fetch('/api/notify-telegram', {
+      const res = await fetch('/api/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          employeeName: currentEmployeeName,
-          actionType: newEntry.type,
-          time: newEntry.time,
-          distance: newEntry.distance
-        })
+          code: id.code,
+          name: id.name,
+          type: actType,
+          method,
+          distance: distance != null ? Number(distance.toFixed(1)) : null,
+          confidence: method === 'face' ? faceConfidence : null,
+        }),
       });
+      const data = await res.json();
+
+      const who = id.name || id.code;
+      const dmNote = data.telegramLinked
+        ? (data.dmSent ? ' · ផ្ញើ DM ផ្ទាល់ ✓' : '')
+        : ' (មិនទាន់ភ្ជាប់ Telegram ផ្ទាល់)';
+      setSuccessMessage(
+        `${who} — ${actType === 'IN' ? 'ចូលធ្វើការ' : 'ចេញពីធ្វើការ'} ត្រូវបានកត់ត្រាជោគជ័យ!${dmNote}`,
+      );
     } catch (e) {
-      console.error("Failed to save history or notify Telegram:", e);
+      console.error('Failed to record attendance:', e);
+      setSuccessMessage('មានបញ្ហាក្នុងការកត់ត្រា។ សូមសាកល្បងម្ដងទៀត។');
     }
-    
-    const msg = `កំណត់ត្រា ${actType === 'IN' ? 'ចូលធ្វើការ' : 'ចេញពីធ្វើការ'} ត្រូវបានរក្សាទុកដោយជោគជ័យ! (ព្រមទាំងបានជូនដំណឹងទៅ Telegram)`;
-    setSuccessMessage(msg);
+
+    // Refresh history from the server
+    if (employee) loadHistory(employee.code);
+
     setShowSuccess(true);
-    setTimeout(() => {
-      setShowSuccess(false);
-    }, 2500);
+    setTimeout(() => setShowSuccess(false), 2800);
 
     setPhoto(null);
     setActionType(null);
     setQrActionType(null);
+    setMatchedEmployee(null);
+    setFaceStatus('idle');
   };
 
   const handleQRScan = (results: any) => {
@@ -312,12 +339,26 @@ export default function App() {
      if (typeof text !== 'string') return;
 
      if (validQrSecrets.includes(text)) {
-         submitAttendance('qr', text);
+         submitAttendance('qr');
      } else {
          alert('QR Code មិនត្រឹមត្រូវទេ! (តម្រូវឲ្យស្កេន QR ការិយាល័យ)');
          setQrActionType(null);
      }
   };
+
+  // Wait until we know whether a device employee exists (avoid flash)
+  if (!activationChecked) {
+    return (
+      <div className="min-h-[100dvh] bg-ambient flex items-center justify-center">
+        <Loader2 className="w-7 h-7 text-brand-400 animate-spin" />
+      </div>
+    );
+  }
+
+  // Not activated yet -> show the Employee ID gate
+  if (!employee) {
+    return <ActivateGate onActivated={(e) => setEmployee(e)} />;
+  }
 
   return (
     <div className="flex flex-col h-[100dvh] bg-ambient font-sans text-slate-900 pb-16 safe-area-bottom">
@@ -334,10 +375,19 @@ export default function App() {
             <p className="text-[10px] font-medium text-white/70 -mt-0.5">ប្រព័ន្ធកត់ត្រាវត្តមាន</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 bg-white/15 backdrop-blur rounded-full pl-2.5 pr-3 py-1.5 ring-1 ring-white/20 relative max-w-[45%]">
+        <button
+          onClick={() => {
+            if (confirm('ប្តូរគណនីបុគ្គលិក? អ្នកនឹងត្រូវបញ្ចូល Employee ID ឡើងវិញ។')) {
+              clearActiveEmployee();
+              setEmployee(null);
+              setEnrollment(null);
+            }
+          }}
+          className="flex items-center gap-2 bg-white/15 backdrop-blur rounded-full pl-2.5 pr-3 py-1.5 ring-1 ring-white/20 relative max-w-[48%] active:scale-95 transition"
+        >
           <UserCheck className="w-4 h-4 text-white/80 shrink-0" />
-          <span className="text-xs font-semibold truncate">{tgUser.name}</span>
-        </div>
+          <span className="text-xs font-semibold truncate">{employee?.name || 'បុគ្គលិក'}</span>
+        </button>
       </header>
 
       {/* Main Scrollable Content */}
@@ -504,20 +554,13 @@ export default function App() {
               </div>
             ) : (
               <div className="space-y-3">
-                {history.map((record) => (
-                  <div key={record.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                {history.map((record) => {
+                  const ts = record.created_at || record.time;
+                  return (
+                  <div key={record.id} className="bg-white p-4 rounded-2xl shadow-card border border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      {/* Thumbnail Placeholder representing stored photo */}
-                      <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden relative break-inside-avoid flex items-center justify-center">
-                        {record.method === 'qr' ? (
-                           <div className="w-full h-full bg-indigo-50 flex items-center justify-center text-indigo-500">
-                              <QrCode className="w-6 h-6" />
-                           </div>
-                        ) : record.photo ? (
-                          <img src={record.photo} alt="Verification" className="object-cover w-full h-full" /> 
-                        ) : (
-                          <ImageIcon className="w-5 h-5 text-slate-300" />
-                        )}
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${record.method === 'qr' ? 'bg-indigo-50 text-indigo-500' : 'bg-emerald-50 text-emerald-500'}`}>
+                        {record.method === 'qr' ? <QrCode className="w-6 h-6" /> : <ScanFace className="w-6 h-6" />}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
@@ -525,18 +568,22 @@ export default function App() {
                              {record.type}
                            </span>
                            <span className="font-bold text-slate-700">
-                             {new Date(record.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                             {new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                            </span>
                         </div>
-                        <p className="text-xs text-slate-500 mt-1 font-medium">{new Date(record.time).toLocaleDateString()}</p>
+                        <p className="text-xs text-slate-500 mt-1 font-medium">
+                          {new Date(ts).toLocaleDateString('km-KH')} · {record.method === 'qr' ? 'QR' : 'Face'}
+                          {record.confidence != null ? ` ${record.confidence}%` : ''}
+                        </p>
                       </div>
                     </div>
                     <div className="text-right">
                        <CheckCircle2 className="w-5 h-5 text-emerald-500 inline-block mb-1" />
-                       <div className="text-[10px] text-slate-400">{record.distance}m</div>
+                       {record.distance != null && <div className="text-[10px] text-slate-400">{record.distance}m</div>}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -642,12 +689,12 @@ export default function App() {
                   )}
                   {faceStatus === 'matched' && (
                     <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-emerald-500/20 text-emerald-300 font-semibold text-sm border border-emerald-400/30">
-                      <ScanFace className="w-5 h-5" /> មុខត្រូវគ្នា{faceConfidence !== null ? ` · ${faceConfidence}%` : ''} ✓
+                      <ScanFace className="w-5 h-5" /> ស្គាល់៖ {matchedEmployee?.name || 'បុគ្គលិក'}{faceConfidence !== null ? ` · ${faceConfidence}%` : ''} ✓
                     </div>
                   )}
                   {faceStatus === 'failed' && (
                     <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-red-500/20 text-red-300 font-semibold text-sm border border-red-400/30 text-center">
-                      <AlertTriangle className="w-5 h-5 shrink-0" /> មុខមិនត្រូវគ្នា{faceConfidence !== null ? ` (${faceConfidence}%)` : ''} — សូមថតម្ដងទៀត
+                      <AlertTriangle className="w-5 h-5 shrink-0" /> រកមិនឃើញបុគ្គលិក — មុខមិនត្រូវនឹងអ្នកណាម្នាក់ ឬមិនច្បាស់។ សូមថតម្ដងទៀត
                     </div>
                   )}
 
@@ -719,7 +766,7 @@ export default function App() {
       {showEnroll && (
         <FaceEnroll
           userId={currentUserId}
-          userName={tgUser.name}
+          userName={employee?.name || ''}
           onClose={() => setShowEnroll(false)}
           onEnrolled={(rec) => {
             setEnrollment(rec);
