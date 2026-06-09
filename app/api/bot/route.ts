@@ -31,11 +31,11 @@ bot.use(async (ctx, next) => {
 
 // Basic Commands & Auto-Replies
 bot.start(async (ctx) => {
+  const webAppUrl = 'https://telegram-bot-test-green-nine.vercel.app/';
   await ctx.reply(
-    'សួស្តី! សូមស្វាគមន៍មកកាន់ Bot របស់យើង។ តើអ្នកចង់ឲ្យខ្ញុំជួយអ្នកពីអ្វីខ្លះថ្ងៃនេះ?',
+    'សួស្តី! សូមស្វាគមន៍មកកាន់ប្រព័ន្ធ SecureAttend របស់យើង។ សូមចូលទីនេះដើម្បីស្កេនវត្តមានរបស់អ្នក៖',
     Markup.inlineKeyboard([
-      [Markup.button.callback('ℹ️ អំពីយើង', 'about_us'), Markup.button.callback('🛠 សេវាកម្ម', 'services')],
-      [Markup.button.url('🌐 ចូលទៅកាន់វិបសាយ', 'https://google.com')]
+      [Markup.button.webApp('📸 ចូលស្កេនវត្តមាន', webAppUrl)]
     ])
   );
 });

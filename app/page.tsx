@@ -76,16 +76,15 @@ export default function App() {
         setHistory(JSON.parse(storedHistory));
       }
 
-      const storedCoordsStr = localStorage.getItem('secure_attend_office_coords');
-      if (storedCoordsStr) {
-        const storedCoords = JSON.parse(storedCoordsStr);
-        if (storedCoords.lat && storedCoords.lng) {
-          setOfficeCoords({ lat: parseFloat(storedCoords.lat), lng: parseFloat(storedCoords.lng) });
+      // Load office coordinates from API
+      fetch('/api/office-config').then(res => res.json()).then(data => {
+        if (data.lat && data.lng) {
+          setOfficeCoords({ lat: parseFloat(data.lat), lng: parseFloat(data.lng) });
         }
-        if (storedCoords.radius) {
-          setAllowedRadius(parseFloat(storedCoords.radius));
+        if (data.radius) {
+          setAllowedRadius(parseFloat(data.radius));
         }
-      }
+      }).catch(e => console.error("Failed to fetch office coords:", e));
     } catch (e) {
       console.error("Failed to load local storage data:", e);
     }

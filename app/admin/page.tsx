@@ -64,15 +64,12 @@ export default function AdminDashboard() {
      verifyAdmin();
 
      if (typeof window !== 'undefined') {
-       const coordsStr = localStorage.getItem('secure_attend_office_coords');
-       if (coordsStr) {
-         try {
-           const coords = JSON.parse(coordsStr);
-           if (coords.lat) setOfficeLat(coords.lat.toString());
-           if (coords.lng) setOfficeLng(coords.lng.toString());
-           if (coords.radius) setOfficeRadius(coords.radius.toString());
-         } catch (e) {}
-       }
+       // Fetch Office Coordinates from API
+       fetch('/api/office-config').then(res => res.json()).then(data => {
+           if (data.lat) setOfficeLat(data.lat.toString());
+           if (data.lng) setOfficeLng(data.lng.toString());
+           if (data.radius) setOfficeRadius(data.radius.toString());
+       }).catch(e => console.error(e));
      }
   }, []);
 
@@ -86,18 +83,25 @@ export default function AdminDashboard() {
     }, 1000);
   };
 
-  const handleSaveSystemSettings = (e: React.FormEvent) => {
+  const handleSaveSystemSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setSysSaveStatus('saving');
-    setTimeout(() => {
-       localStorage.setItem('secure_attend_office_coords', JSON.stringify({
-           lat: parseFloat(officeLat) || 11.5564,
-           lng: parseFloat(officeLng) || 104.9282,
-           radius: parseFloat(officeRadius) || 100
-       }));
-       setSysSaveStatus('success');
-       setTimeout(() => setSysSaveStatus('idle'), 3000);
-    }, 800);
+    try {
+        await fetch('/api/office-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+               lat: parseFloat(officeLat) || 11.5564,
+               lng: parseFloat(officeLng) || 104.9282,
+               radius: parseFloat(officeRadius) || 100
+            })
+        });
+        setSysSaveStatus('success');
+        setTimeout(() => setSysSaveStatus('idle'), 3000);
+    } catch (error) {
+        console.error("Save error:", error);
+        setSysSaveStatus('idle');
+    }
   };
 
   if (isAdmin === null || isAdmin === false) {
@@ -325,6 +329,38 @@ export default function AdminDashboard() {
                    </div>
 
                    <form onSubmit={handleSaveSystemSettings} className="space-y-5">
+                       <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                           <label className="block text-sm font-medium text-slate-700 mb-1">បិទភ្ជាប់ Google Maps Link ទីនេះ (Paste link)</label>
+                           <div className="flex gap-2">
+                               <input 
+                                   type="text"
+                                   id="mapLinkInput"
+                                   placeholder="https://www.google.com/maps/place/..."
+                                   className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-600 focus:outline-none transition text-sm"
+                               />
+                               <button 
+                                   type="button"
+                                   onClick={() => {
+                                       const link = (document.getElementById('mapLinkInput') as HTMLInputElement).value;
+                                       const match = link.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+                                       const qMatch = link.match(/q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+                                       if (match) {
+                                           setOfficeLat(match[1]);
+                                           setOfficeLng(match[2]);
+                                       } else if (qMatch) {
+                                           setOfficeLat(qMatch[1]);
+                                           setOfficeLng(qMatch[2]);
+                                       } else {
+                                           alert('មិនអាចទាញយក Coordinates ពី Link នេះបានទេ! សូមសាកល្បង Copy URL ដែលវែង។');
+                                       }
+                                   }}
+                                   className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-medium rounded-lg shadow-sm transition whitespace-nowrap text-sm"
+                               >
+                                   ទាញយក (Extract)
+                               </button>
+                           </div>
+                       </div>
+
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                            <div>
                                <label className="block text-sm font-medium text-slate-700 mb-1">Latitude</label>
