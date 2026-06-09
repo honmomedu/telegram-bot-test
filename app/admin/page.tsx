@@ -1,131 +1,226 @@
 'use client';
-import React, { useState } from 'react';
-import { Send, Users, AlertCircle, CheckCircle2, Home } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Users, AlertCircle, CheckCircle2, Home, BarChart3, Settings, Bell, Search, UserPlus, LogOut, Download } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
+
+interface Employee {
+  id: string;
+  name: string;
+  department: string;
+  status: 'Active' | 'Inactive';
+  lastActive: string;
+}
+
+const mockEmployees: Employee[] = [
+  { id: 'EMP-001', name: 'Sok San', department: 'IT', status: 'Active', lastActive: '2026-06-09T08:30:00' },
+  { id: 'EMP-002', name: 'Chea Roth', department: 'HR', status: 'Active', lastActive: '2026-06-08T17:15:00' },
+  { id: 'EMP-003', name: 'Nita Ly', department: 'Sales', status: 'Inactive', lastActive: '2026-06-01T10:00:00' },
+];
 
 export default function AdminDashboard() {
-  const [message, setMessage] = useState('');
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [resultMessage, setResultMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<'employees' | 'settings'>('employees');
+  
+  // Settings Tab
+  const [telegramToken, setTelegramToken] = useState('');
+  const [telegramChatId, setTelegramChatId] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
 
-  const handleBroadcast = async (e: React.FormEvent) => {
+  const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim()) return;
-
-    setStatus('loading');
-    try {
-      const res = await fetch('/api/broadcast', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message })
-      });
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data.error || 'Failed to broadcast');
-      
-      setStatus('success');
-      setResultMessage(`ផ្សព្វផ្សាយជោគជ័យទៅកាន់ ${data.successCount}/${data.total} អ្នកប្រើប្រាស់។`);
-      setMessage('');
-    } catch (err: any) {
-      setStatus('error');
-      setResultMessage(err.message);
-    }
+    setSaveStatus('saving');
+    setTimeout(() => {
+       // In a real app, this would send an API request to store in a DB / secure vault
+       setSaveStatus('success');
+       setTimeout(() => setSaveStatus('idle'), 3000);
+    }, 1000);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 md:p-12 text-slate-900 font-sans">
-      <div className="max-w-3xl mx-auto space-y-8">
-        {/* Navigation */}
-        <Link href="/" className="inline-flex items-center text-sm font-medium text-slate-500 hover:text-slate-800 transition">
-          <Home className="w-4 h-4 mr-2" /> ត្រលប់ទៅទំព័រដើមការណែនាំ
-        </Link>
-        
-        <header className="flex items-center space-x-3 pb-6 border-b border-slate-200">
-          <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-sm">
-            <Send size={24} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Bot Admin Mini App</h1>
-            <p className="text-slate-500 text-sm">ប្រព័ន្ធគ្រប់គ្រង និងផ្សព្វផ្សាយដំណឹង (Broadcast Dashboard)</p>
-          </div>
-        </header>
-
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center">
-            <Users className="w-5 h-5 mr-2 text-blue-600" />
-            ផ្សព្វផ្សាយដំណឹងថ្មី (Broadcast Message)
-          </h2>
-          
-          <form onSubmit={handleBroadcast} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">អត្ថបទដំណឹង</label>
-              <textarea
-                rows={5}
-                className="w-full rounded-lg border border-slate-300 p-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition"
-                placeholder="វាយបញ្ចូលសារដែលអ្នកចង់ផ្ញើទៅកាន់អ្នកប្រើប្រាស់គ្រប់គ្នា..."
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                required
-              ></textarea>
-            </div>
-
-            {status === 'error' && (
-              <div className="p-4 rounded-lg bg-red-50 text-red-700 border border-red-100 flex items-start text-sm">
-                <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
-                <div>
-                  <strong>បរាជ័យ៖</strong> {resultMessage} 
-                  <p className="mt-2 text-xs font-semibold">សូមប្រាកដថា៖</p>
-                  <ul className="list-disc leading-relaxed list-inside text-xs mt-1 space-y-1">
-                    <li>រក្សាទុក NEXT_PUBLIC_SUPABASE_URL និង SUPABASE_SERVICE_ROLE_KEY លើយ Vercel។</li>
-                    <li>បានកំណត់ SQL Schema រួចរាល់នៅក្នុង Supabase Editor។</li>
-                  </ul>
-                </div>
-              </div>
-            )}
-
-            {status === 'success' && (
-              <div className="p-4 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-100 flex items-center text-sm">
-                <CheckCircle2 className="w-5 h-5 mr-2 flex-shrink-0 text-emerald-600" />
-                <div>{resultMessage}</div>
-              </div>
-            )}
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={status === 'loading' || !message.trim()}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium px-6 py-2.5 rounded-lg shadow-sm transition flex items-center"
-              >
-                {status === 'loading' ? 'កំពុងបញ្ជូន...' : (
-                  <>
-                    <Send className="w-4 h-4 mr-2" />
-                    បញ្ជូនសារ (Send to All)
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans selection:bg-indigo-100 selection:text-indigo-900">
+      
+      {/* Sidebar Navigation */}
+      <aside className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col hidden md:flex h-screen sticky top-0">
+        <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+            <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                <div className="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center text-white"><BarChart3 size={18} /></div>
+                Admin HQ
+            </h1>
         </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 text-sm text-slate-600">
-          <h3 className="font-semibold text-slate-800 mb-3 flex items-center">
-             <div className="w-6 h-6 bg-green-100 text-green-700 rounded flex justify-center items-center mr-2 text-xs font-bold">1</div>
-             សេចក្តីណែនាំអំពី Supabase (តើត្រូវធ្វើដូចម្តេច?)
-          </h3>
-          <ol className="list-decimal list-inside space-y-3 pl-2">
-            <li>បង្កើត Project នៅក្នុង <a href="https://supabase.com" target="_blank" className="text-blue-600 hover:underline">Supabase</a>។</li>
-            <li>យកកូដពីក្នុង Folder <code className="bg-slate-100 px-2 py-1 rounded border border-slate-200 font-mono text-xs">supabase/schema.sql</code> ទៅ Run ក្នុង Supabase <strong>SQL Editor</strong> ដើម្បីបង្កើត Tables។</li>
-            <li>យក <strong>Project URL</strong>, <strong>anon key</strong>, និង <strong>service_role secret</strong> ពី Supabase <strong>Project Settings &gt; API</strong>។</li>
-            <li>ដាក់ចូលក្នុង Vercel Environment Variables: 
-              <div className="mt-3 p-3 bg-slate-900 border border-slate-800 text-slate-100 rounded-lg font-mono text-xs overflow-x-auto space-y-1">
-                <div>NEXT_PUBLIC_SUPABASE_URL=https://(your_url).supabase.co</div>
-                <div>NEXT_PUBLIC_SUPABASE_ANON_KEY=ey... (ជាជម្រើស/សម្រាប់ថ្ងៃក្រោយ)</div>
-                <div>SUPABASE_SERVICE_ROLE_KEY=ey...</div>
-              </div>
-            </li>
-          </ol>
+        <div className="p-4 flex-1 space-y-1">
+            <button 
+                onClick={() => setActiveTab('employees')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'employees' ? 'bg-indigo-600/10 text-indigo-400' : 'hover:bg-slate-800 hover:text-white'}`}
+            >
+                <Users size={18} /> គ្រប់គ្រងបុគ្គលិក (Employees)
+            </button>
+            <button 
+                onClick={() => setActiveTab('settings')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'settings' ? 'bg-indigo-600/10 text-indigo-400' : 'hover:bg-slate-800 hover:text-white'}`}
+            >
+                <Bell size={18} /> Telegram Notifications
+            </button>
+            <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium hover:bg-slate-800 hover:text-white transition-colors opacity-50 cursor-not-allowed">
+                <Settings size={18} /> ប្រព័ន្ធ (System)
+            </button>
         </div>
+        <div className="p-4 border-t border-slate-800">
+            <Link href="/" className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
+                <LogOut size={16} /> ត្រឡប់ទៅកម្មវិធីបញ្ជិកា
+            </Link>
+        </div>
+      </aside>
+
+      {/* Mobile Topbar */}
+      <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center sticky top-0 z-50">
+          <div className="font-bold flex items-center gap-2">
+             <div className="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center"><BarChart3 size={16} /></div> Admin HQ
+          </div>
+          <div className="flex gap-2">
+             <button onClick={() => setActiveTab('employees')} className={`p-2 rounded ${activeTab === 'employees' ? 'bg-slate-800 hover:bg-slate-800 text-indigo-400' : 'hover:bg-slate-800'}`}><Users size={20}/></button>
+             <button onClick={() => setActiveTab('settings')} className={`p-2 rounded ${activeTab === 'settings' ? 'bg-slate-800 hover:bg-slate-800 text-indigo-400' : 'hover:bg-slate-800'}`}><Bell size={20}/></button>
+          </div>
       </div>
+
+      {/* Main Content Area */}
+      <main className="flex-1 p-6 md:p-12 overflow-y-auto w-full max-w-5xl">
+        
+        {activeTab === 'employees' && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+                <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+                   <div>
+                       <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">គ្រប់គ្រងបុគ្គលិក</h2>
+                       <p className="text-slate-500 mt-1">គ្រប់គ្រងគណនី និងមើលប្រវត្តិវត្តមានបុគ្គលិក</p>
+                   </div>
+                   <div className="flex gap-3">
+                       <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition shadow-sm">
+                           <Download size={16} /> Export CSV
+                       </button>
+                       <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition shadow-sm shadow-indigo-600/20">
+                           <UserPlus size={16} /> បន្ថែមបុគ្គលិកថ្មី
+                       </button>
+                   </div>
+                </header>
+
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
+                        <div className="relative w-full max-w-sm">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                            <input type="text" placeholder="ស្វែងរកឈ្មោះ ឬអត្តលេខ..." className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-indigo-600 focus:outline-none transition" />
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-semibold bg-slate-50">
+                                    <th className="p-4">អត្តលេខ</th>
+                                    <th className="p-4">ឈ្មោះបុគ្គលិក</th>
+                                    <th className="p-4">ផ្នែក</th>
+                                    <th className="p-4">ស្ថានភាព</th>
+                                    <th className="p-4 text-right">សកម្មភាពចុងក្រោយ</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-sm">
+                                {mockEmployees.map((emp) => (
+                                    <tr key={emp.id} className="hover:bg-slate-50/50 transition">
+                                        <td className="p-4 font-mono text-slate-500">{emp.id}</td>
+                                        <td className="p-4 font-medium text-slate-900">{emp.name}</td>
+                                        <td className="p-4 text-slate-600">{emp.department}</td>
+                                        <td className="p-4">
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${emp.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-800'}`}>
+                                                {emp.status}
+                                            </span>
+                                        </td>
+                                        <td className="p-4 text-right text-slate-500">
+                                            {new Date(emp.lastActive).toLocaleString('km-KH')}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="p-4 border-t border-slate-200 bg-slate-50/50 text-xs text-slate-500 flex justify-between">
+                        <span>បង្ហាញមុខបុគ្គលិកចំនួន 3 នាក់</span>
+                        <div className="flex gap-2">
+                             <button className="px-2 py-1 border border-slate-200 rounded disabled:opacity-50" disabled>« Previous</button>
+                             <button className="px-2 py-1 border border-slate-200 rounded disabled:opacity-50" disabled>Next »</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'settings' && (
+            <div className="space-y-6 max-w-2xl animate-in fade-in duration-300">
+                <header>
+                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">Telegram Integration</h2>
+                   <p className="text-slate-500 mt-1">ភ្ជាប់ប្រព័ន្ធ Admin ជាមួយនឹង Telegram ដើម្បីទទួលសារជូនដំណឹងពេលមានអ្នក Check-In/Out</p>
+                </header>
+
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
+                   <div className="flex items-start gap-4 p-4 bg-indigo-50 text-indigo-900 rounded-lg border border-indigo-100">
+                       <Bell className="w-6 h-6 shrink-0 mt-0.5" />
+                       <div className="text-sm">
+                           <p className="font-semibold mb-1">របៀបភ្ជាប់ (How to connect):</p>
+                           <ol className="list-decimal list-inside space-y-1 opacity-90">
+                               <li>ចូលទៅកាន់ Telegram ហើយស្វែងរក <strong>@BotFather</strong> ដើម្បីបង្កើត Bot ថ្មី</li>
+                               <li>Copy យក <strong>Bot Token</strong> ដែល BotFather អោយ</li>
+                               <li>បន្ថែម Bot នោះចូលទៅក្នុង Group Telegram របស់អ្នក</li>
+                               <li>ភ្ជាប់ជាមួយ <strong>@userinfobot</strong> ឬទៅលើវេបសាយដើម្បីយក <strong>Group Chat ID</strong></li>
+                           </ol>
+                       </div>
+                   </div>
+
+                   <form onSubmit={handleSaveSettings} className="space-y-5">
+                       <div>
+                           <label className="block text-sm font-medium text-slate-700 mb-1">Telegram Bot Token</label>
+                           <input 
+                               type="password" 
+                               value={telegramToken}
+                               onChange={(e) => setTelegramToken(e.target.value)}
+                               placeholder="ឧ. 123456789:ABCdefGHIjklMNO..."
+                               className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-600 focus:outline-none transition font-mono text-sm"
+                           />
+                           <p className="text-xs text-slate-500 mt-2">កំណត់ដោយអថេរ <code className="bg-slate-100 p-0.5 rounded text-indigo-600">TELEGRAM_BOT_TOKEN</code> ក្នុង Server (.env)</p>
+                       </div>
+
+                       <div>
+                           <label className="block text-sm font-medium text-slate-700 mb-1">Admin Group Chat ID</label>
+                           <input 
+                               type="text" 
+                               value={telegramChatId}
+                               onChange={(e) => setTelegramChatId(e.target.value)}
+                               placeholder="ឧ. -100123456789"
+                               className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-600 focus:outline-none transition font-mono text-sm"
+                           />
+                           <p className="text-xs text-slate-500 mt-2">កំណត់ដោយអថេរ <code className="bg-slate-100 p-0.5 rounded text-indigo-600">TELEGRAM_ADMIN_CHAT_ID</code> ក្នុង Server (.env)</p>
+                       </div>
+
+                       {saveStatus === 'success' && (
+                           <div className="p-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-sm flex items-center gap-2">
+                               <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                               បានរក្សាទុកការកំណត់យ៉ាងជោគជ័យ!
+                           </div>
+                       )}
+
+                       <div className="flex justify-end pt-4 border-t border-slate-100">
+                           <button 
+                               type="submit"
+                               disabled={saveStatus === 'saving'}
+                               className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg shadow-sm transition flex items-center gap-2"
+                           >
+                               {saveStatus === 'saving' ? (
+                                   <>កំពុងរក្សាទុក...</>
+                               ) : (
+                                   <>រក្សាទុកការកំណត់</>
+                               )}
+                           </button>
+                       </div>
+                   </form>
+                </div>
+            </div>
+        )}
+      </main>
     </div>
   );
 }

@@ -1,216 +1,523 @@
 'use client';
-import React, { useState } from 'react';
-import { Bot, Layers, BookOpen, Send, Users, Shield, ArrowRight, Activity, Menu, X, Globe } from 'lucide-react';
-import Link from 'next/link';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Camera, MapPin, Clock, History as HistoryIcon, ShieldCheck, UserCheck, CheckCircle2, XCircle, RefreshCw, Info, AlertTriangle, SwitchCamera, Navigation, Image as ImageIcon, X } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { motion, AnimatePresence } from 'motion/react';
 
-export default function TelegramBotLanding() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+const MapComponent = dynamic(() => import('../components/Map'), { ssr: false });
 
-  const structureCode = `my-telegram-bot/
-├── api/
-│   └── bot.js      <- Serverless Function
-├── package.json
-└── .gitignore`;
+// Office Coordinates (Example: Central Phnom Penh)
+const OFFICE_COORDS = { lat: 11.5564, lng: 104.9282 }; 
+const ALLOWED_RADIUS_METERS = 100;
+
+// Haversine formula to calculate distance directly on the client
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371e3; // Earth's radius in metres
+  const f1 = lat1 * Math.PI / 180;
+  const f2 = lat2 * Math.PI / 180;
+  const df = (lat2 - lat1) * Math.PI / 180;
+  const dl = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(df / 2) * Math.sin(df / 2) +
+            Math.cos(f1) * Math.cos(f2) *
+            Math.sin(dl / 2) * Math.sin(dl / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState<'attend' | 'history' | 'info'>('attend');
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [distance, setDistance] = useState<number | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [isWithinRadius, setIsWithinRadius] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  
+  // Camera & Verification States
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [actionType, setActionType] = useState<'IN' | 'OUT' | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  
+  // Mock History
+  const [history, setHistory] = useState<any[]>([]);
+  const [isClient, setIsClient] = useState(false);
+
+  // Real-time clock update & History Load
+  useEffect(() => {
+    setIsClient(true);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    
+    try {
+      const storedHistory = localStorage.getItem('secure_attend_history');
+      if (storedHistory) {
+        setHistory(JSON.parse(storedHistory));
+      }
+    } catch (e) {
+      console.error("Failed to load history:", e);
+    }
+    
+    return () => clearInterval(timer);
+  }, []);
+
+  // Strict Geolocation fetching
+  const checkLocation = useCallback(() => {
+    setIsLocating(true);
+    setLocationError(null);
+    setDistance(null);
+    
+    if (!navigator.geolocation) {
+      setLocationError('កម្មវិធី Browser របស់អ្នកមិនគាំទ្រប្រព័ន្ធទីតាំង (Geolocation) ទេ');
+      setIsLocating(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setLocation({ lat: latitude, lng: longitude });
+        
+        // Calculate Distance using Haversine
+        const dist = calculateDistance(latitude, longitude, OFFICE_COORDS.lat, OFFICE_COORDS.lng);
+        setDistance(dist);
+        setIsWithinRadius(dist <= ALLOWED_RADIUS_METERS);
+        setIsLocating(false);
+      },
+      (err) => {
+        console.warn("Location Error:", err.message || err);
+        setLocationError('មិនអាចទាញយកទីតាំងបានទេ។ សូមបើកសិទ្ធិ Location ជូនកម្មវិធី។');
+        setIsLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }, []);
+
+  // Fetch location on mount
+  useEffect(() => {
+    checkLocation();
+  }, [checkLocation]);
+
+  // Clean up camera on unmount/tab change
+  useEffect(() => {
+    return () => stopCamera();
+  }, []);
+
+  const openCameraFlow = async (type: 'IN' | 'OUT') => {
+    setActionType(type);
+    setPhoto(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'user' }, // Strictly front camera
+        audio: false 
+      });
+      setCameraActive(true);
+      // Slight delay to ensure video element is rendered
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }, 100);
+    } catch (err) {
+      console.error("Camera access denied:", err);
+      alert("មិនអាចបើកកាមេរ៉ាបានទេ! សូមអនុញ្ញាតសិទ្ធិប្រើប្រាស់ Camera។");
+      setActionType(null);
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+    }
+    setCameraActive(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+       const video = videoRef.current;
+       const canvas = canvasRef.current;
+       // Match source dimensions for high quality
+       canvas.width = video.videoWidth || 640;
+       canvas.height = video.videoHeight || 480;
+       const ctx = canvas.getContext('2d');
+       if (ctx) {
+         // Mirror the canvas so it acts like a real selfie mirror
+         ctx.translate(canvas.width, 0);
+         ctx.scale(-1, 1);
+         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+         const photoData = canvas.toDataURL('image/jpeg', 0.85);
+         setPhoto(photoData);
+         stopCamera();
+       }
+    }
+  };
+
+  const retakePhoto = () => {
+    setPhoto(null);
+    openCameraFlow(actionType!);
+  };
+
+  const submitAttendance = async () => {
+    if (!photo || !actionType) return;
+    
+    // Simulate current logged in user
+    const currentEmployeeName = "Sok San"; 
+
+    const newEntry = {
+      id: Date.now(),
+      type: actionType,
+      time: new Date().toISOString(),
+      distance: distance?.toFixed(1) || '0',
+      photo: photo
+    };
+    
+    const updatedHistory = [newEntry, ...history].slice(0, 50); // Keep last 50 entries
+    setHistory(updatedHistory);
+    
+    try {
+      localStorage.setItem('secure_attend_history', JSON.stringify(updatedHistory));
+      
+      // Notify Telegram
+      await fetch('/api/notify-telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeName: currentEmployeeName,
+          actionType: newEntry.type,
+          time: newEntry.time,
+          distance: newEntry.distance
+        })
+      });
+    } catch (e) {
+      console.error("Failed to save history or notify Telegram:", e);
+    }
+    
+    const msg = `កំណត់ត្រា ${actionType === 'IN' ? 'ចូលធ្វើការ' : 'ចេញពីធ្វើការ'} ត្រូវបានរក្សាទុកដោយជោគជ័យ! (ព្រមទាំងបានជូនដំណឹងទៅ Telegram)`;
+    setSuccessMessage(msg);
+    setShowSuccess(true);
+    setTimeout(() => {
+      setShowSuccess(false);
+    }, 2500);
+
+    setPhoto(null);
+    setActionType(null);
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-900 overflow-x-hidden scroll-smooth">
-      {/* Navigation */}
-      <nav className="fixed w-full top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200/80">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
-              <Bot size={24} />
-            </div>
-            <span className="font-bold text-xl tracking-tight text-slate-900">BotManager</span>
-          </div>
-          
-          <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">Features</a>
-            <a href="#docs" className="text-sm font-medium text-slate-600 hover:text-indigo-600 transition-colors">Documentation</a>
-            <Link href="/admin" className="text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 rounded-full transition-all shadow-md hover:shadow-lg shadow-indigo-600/20 flex items-center gap-2">
-              Admin Dashboard <ArrowRight size={16} />
-            </Link>
-          </div>
-
-          <button className="md:hidden p-2 text-slate-600" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
+    <div className="flex flex-col h-[100dvh] bg-slate-50 font-sans text-slate-900 pb-16 safe-area-bottom">
+      {/* Top App Header */}
+      <header className="bg-indigo-600 text-white p-4 shadow-md z-10 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-6 h-6 text-indigo-200" />
+          <h1 className="text-lg font-bold">SecureAttend</h1>
         </div>
+        <div className="text-sm font-medium opacity-90">
+          នាយកដ្ឋាន IT
+        </div>
+      </header>
 
-        {/* Mobile Menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden bg-white border-b border-slate-200 px-6 py-4 flex flex-col gap-4 shadow-lg absolute w-full">
-            <a href="#features" onClick={() => setMobileMenuOpen(false)} className="text-base font-medium text-slate-600">Features</a>
-            <a href="#docs" onClick={() => setMobileMenuOpen(false)} className="text-base font-medium text-slate-600">Documentation</a>
-            <Link href="/admin" className="text-base font-medium text-indigo-600 flex items-center gap-2">
-              Admin Dashboard <ArrowRight size={16} />
-            </Link>
+      {/* Main Scrollable Content */}
+      <main className="flex-1 overflow-y-auto w-full max-w-md mx-auto h-full sm:pt-4">
+        {/* TAB 1: ATTENDANCE */}
+        {activeTab === 'attend' && (
+          <div className="p-4 flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200">
+            {/* Clock Widget */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col items-center justify-center relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+              <Clock className="w-8 h-8 text-indigo-500 mb-2" />
+              <div className="text-4xl font-extrabold text-slate-800 tracking-tight font-mono">
+                {isClient ? currentTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--'}
+              </div>
+              <div className="text-slate-500 mt-1 text-sm font-medium">
+                {isClient ? currentTime.toLocaleDateString('km-KH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'កំពុងផ្ទុក...'}
+              </div>
+            </div>
+
+            {/* Geofence Card */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-blue-500" /> ទីតាំងរបស់អ្នក
+                </h2>
+                <button 
+                  onClick={checkLocation}
+                  disabled={isLocating}
+                  className="p-1.5 bg-slate-100 text-slate-600 rounded-md hover:bg-slate-200 disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {locationError ? (
+                <div className="p-3 bg-red-50 text-red-700 rounded-xl text-sm flex gap-2 items-start border border-red-100">
+                  <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+                  <p className="font-medium leading-tight">{locationError}</p>
+                </div>
+              ) : distance !== null ? (
+                <>
+                  <div className={`p-4 rounded-xl border ${isWithinRadius ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-full ${isWithinRadius ? 'bg-emerald-500' : 'bg-red-500'} text-white`}>
+                        {isWithinRadius ? <CheckCircle2 className="w-6 h-6" /> : <XCircle className="w-6 h-6" />}
+                      </div>
+                      <div>
+                        <p className={`font-bold ${isWithinRadius ? 'text-emerald-800' : 'text-red-800'}`}>
+                          {isWithinRadius ? 'ស្ថិតក្នុងតំបន់អនុញ្ញាត' : 'នៅឆ្ងាយពីការិយាល័យ'}
+                        </p>
+                        <p className={`text-sm font-medium mt-0.5 ${isWithinRadius ? 'text-emerald-600' : 'text-red-600'}`}>
+                          ចម្ងាយ៖ {distance.toFixed(0)} ម៉ែត្រ (អនុញ្ញាត {ALLOWED_RADIUS_METERS}m)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <MapComponent officeCoords={OFFICE_COORDS} userCoords={location} radius={ALLOWED_RADIUS_METERS} />
+                  </div>
+                </>
+              ) : (
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center text-slate-500 text-sm">
+                  <Navigation className="w-4 h-4 mr-2 animate-pulse" /> កំពុងស្កេនទីតាំង...
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-4 mt-2">
+              <button 
+                disabled={!isWithinRadius}
+                onClick={() => openCameraFlow('IN')}
+                className="bg-emerald-600 text-white disabled:bg-slate-300 disabled:text-slate-500 py-4 rounded-2xl font-bold shadow-sm shadow-emerald-600/20 active:scale-95 transition-all flex flex-col items-center justify-center gap-2"
+              >
+                <div className="bg-white/20 p-2 rounded-full"><UserCheck className="w-6 h-6" /></div>
+                ចូលធ្វើការ (IN)
+              </button>
+
+              <button 
+                disabled={!isWithinRadius}
+                onClick={() => openCameraFlow('OUT')}
+                className="bg-amber-500 text-white disabled:bg-slate-300 disabled:text-slate-500 py-4 rounded-2xl font-bold shadow-sm shadow-amber-500/20 active:scale-95 transition-all flex flex-col items-center justify-center gap-2"
+              >
+                <div className="bg-black/10 p-2 rounded-full"><Clock className="w-6 h-6" /></div>
+                ចេញធ្វើការ (OUT)
+              </button>
+            </div>
+            
+            {!isWithinRadius && distance !== null && !locationError && (
+              <p className="text-xs text-center text-slate-500 font-medium">អ្នកត្រូវតែស្ថិតនៅក្នុងរយៈចម្ងាយ 100 ម៉ែត្រការិយាល័យ</p>
+            )}
           </div>
         )}
+
+        {/* TAB 2: HISTORY */}
+        {activeTab === 'history' && (
+          <div className="p-4 animate-in fade-in duration-200">
+            <h2 className="text-xl font-bold text-slate-800 mb-4 px-2">ប្រវត្តិបញ្ជិកា (History)</h2>
+            
+            {history.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                <HistoryIcon className="w-12 h-12 mb-3 opacity-20" />
+                <p>មិនទាន់មានប្រវត្តិទេ</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {history.map((record) => (
+                  <div key={record.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {/* Thumbnail Placeholder representing stored photo */}
+                      <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden relative break-inside-avoid">
+                        {record.photo ? 
+                          <img src={record.photo} alt="Verification" className="object-cover w-full h-full" /> : 
+                          <ImageIcon className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-300" />
+                        }
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                           <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${record.type === 'IN' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                             {record.type}
+                           </span>
+                           <span className="font-bold text-slate-700">
+                             {new Date(record.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                           </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1 font-medium">{new Date(record.time).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                       <CheckCircle2 className="w-5 h-5 text-emerald-500 inline-block mb-1" />
+                       <div className="text-[10px] text-slate-400">{record.distance}m</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: INFO / SECURITY SPECS */}
+        {activeTab === 'info' && (
+          <div className="p-4 space-y-4 pb-10 animate-in fade-in duration-200">
+            <h2 className="text-xl font-bold text-slate-800 mb-2 px-2">ស្ថាបត្យកម្មប្រព័ន្ធ (Architecture)</h2>
+            
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+              <h3 className="font-bold text-indigo-700 flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5" /> ការពារការបន្លំម៉ោង (Anti-Cheat Time)
+              </h3>
+              <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                ដើម្បីទប់ស្កាត់ការបន្លំម៉ោង (Fake Clock)៖ បច្ចុប្បន្ន Time ដែលឃើញលើអេក្រង់គឺគ្រាន់តែសម្រាប់បង្ហាញ។ នៅពេលចុច Submit, Frontend ទាញទិន្នន័យបញ្ជូនទៅ Database (e.g., Firebase), ប៉ុន្តែ Database ត្រូវតែប្រើ <strong>Server-Side Timestamp</strong> (ដូចជា <code>serverTimestamp()</code> ក្នុង Firestore ឬ <code>now()</code> ក្នុង Supabase) ជាជាងយក Time ពី Device ផ្ទាល់។
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+              <h3 className="font-bold text-amber-600 flex items-center gap-2">
+                <MapPin className="w-5 h-5" /> ការពារទីតាំងក្លែងក្លាយ (Anti-Fake GPS)
+              </h3>
+              <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                ប្រព័ន្ធប្រើប្រាស់នូវ <strong>HTML5 Geolocation API</strong> ប្រកបដោយ Accuracy ខ្ពស់។ យើងប្រើប្រាស់រូបមន្ត <strong>Haversine Formula</strong> គណនាចម្ងាយដោយឡែកពី API Maps ផ្សេងៗ។ 
+              </p>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+              <h3 className="font-bold text-emerald-600 flex items-center gap-2">
+                <Camera className="w-5 h-5" /> កាមេរ៉ាផ្ទាល់ (Live Self-Verification)
+              </h3>
+              <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                មិនអនុញ្ញាតឱ្យប្រើ <code>&lt;input type="file" /&gt;</code> ឡើយ ដើម្បីហាមការ Upload រូបកាត់តចូល។ យើងបញ្ជាយកត្រឹមតែកាមេរ៉ាមុខ (Front Face Camera) ផ្ទាល់ (<code>navigator.mediaDevices.getUserMedia</code>) ដោយទាញចេញជាផ្ទាំង Canvas Base64 រួចទើបបម្លែងអាប់ឡូតទៅកាន់ Cloud Storage។
+              </p>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* FULLSCREEN CAMERA OVERLAY */}
+      {actionType && (
+        <div className="fixed inset-0 bg-black z-50 flex flex-col slide-in-from-bottom-full animate-in duration-300">
+           <div className="p-4 flex items-center justify-between text-white font-medium bg-gradient-to-b from-black/80 to-transparent absolute top-0 w-full z-10">
+              <span>{actionType === 'IN' ? 'ឆែកចូល (Check IN)' : 'ឆែកចេញ (Check OUT)'} - ថតរូបផ្ទៀងផ្ទាត់</span>
+              <button onClick={() => { stopCamera(); setActionType(null); setPhoto(null); }} className="p-2 bg-white/20 rounded-full hover:bg-white/30 backdrop-blur">
+                 <X className="w-5 h-5" />
+              </button>
+           </div>
+           
+           <div className="relative flex-1 bg-slate-900 overflow-hidden flex items-center justify-center">
+             {!photo ? (
+               <>
+                 {/* Video mirror view */}
+                 <video 
+                   ref={videoRef} 
+                   autoPlay 
+                   playsInline 
+                   muted 
+                   className="object-cover w-full h-full transform -scale-x-100" 
+                 />
+                 <canvas ref={canvasRef} className="hidden" />
+                 
+                 {/* Face Guide Overlay */}
+                 <div className="absolute inset-0 border-[10vw] border-black/40 pointer-events-none">
+                    <div className="w-full h-full border-2 border-dashed border-white/50 rounded-[4rem]"></div>
+                 </div>
+               </>
+             ) : (
+                <img src={photo} alt="Captured" className="object-cover w-full h-full" />
+             )}
+           </div>
+           
+           {/* Camera Bottom Constraints */}
+           <div className="bg-black text-white p-8 pb-12 flex flex-col items-center justify-center gap-6">
+              {!photo ? (
+                <button 
+                  onClick={capturePhoto}
+                  className="w-20 h-20 bg-white rounded-full flex items-center justify-center ring-4 ring-white/30 active:scale-95 transition-transform"
+                >
+                  <div className="w-16 h-16 bg-white border-2 border-black rounded-full"></div>
+                </button>
+              ) : (
+                <div className="w-full max-w-sm flex gap-4">
+                  <button 
+                    onClick={retakePhoto}
+                    className="flex-1 py-4 bg-slate-800 rounded-2xl font-bold flex items-center justify-center gap-2"
+                  >
+                    ថតផ្ដើមម្ដងទៀត
+                  </button>
+                  <button 
+                    onClick={submitAttendance}
+                    className="flex-1 py-4 bg-emerald-600 rounded-2xl font-bold text-white shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
+                  >
+                    យល់ព្រម <CheckCircle2 className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
+           </div>
+        </div>
+      )}
+
+      {/* Bottom Tab Navigation */}
+      <nav className="border-t border-slate-200 bg-white px-6 py-3 flex justify-between items-center fixed bottom-0 w-full z-40 pb-safe">
+        <button 
+          onClick={() => setActiveTab('attend')} 
+          className={`flex flex-col items-center gap-1 w-1/3 transition-colors ${activeTab === 'attend' ? 'text-indigo-600' : 'text-slate-400'}`}
+        >
+          <div className={`${activeTab === 'attend' ? 'bg-indigo-100' : 'bg-transparent'} p-1.5 rounded-full transition-colors`}>
+            <MapPin className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">បញ្ជិកា</span>
+        </button>
+        
+        <button 
+          onClick={() => setActiveTab('history')} 
+          className={`flex flex-col items-center gap-1 w-1/3 transition-colors ${activeTab === 'history' ? 'text-indigo-600' : 'text-slate-400'}`}
+        >
+          <div className={`${activeTab === 'history' ? 'bg-indigo-100' : 'bg-transparent'} p-1.5 rounded-full transition-colors`}>
+            <HistoryIcon className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">ប្រវត្តិ</span>
+        </button>
+        
+        <button 
+          onClick={() => setActiveTab('info')} 
+          className={`flex flex-col items-center gap-1 w-1/3 transition-colors ${activeTab === 'info' ? 'text-indigo-600' : 'text-slate-400'}`}
+        >
+          <div className={`${activeTab === 'info' ? 'bg-indigo-100' : 'bg-transparent'} p-1.5 rounded-full transition-colors`}>
+            <Info className="w-6 h-6" />
+          </div>
+          <span className="text-[10px] font-bold">ព័ត៌មាន</span>
+        </button>
       </nav>
 
-      {/* Hero Section */}
-      <section className="pt-40 pb-20 px-6 max-w-7xl mx-auto text-center relative mt-10">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-indigo-400/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
-        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-widest mb-6">
-          <Activity size={14} className="text-indigo-600 animate-pulse" />
-          Serverless Ready
-        </span>
-        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-slate-900 mb-8 leading-[1.1]">
-          Powerful Telegram Bots to<br className="hidden md:block"/> <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-blue-500">Transform Your Business</span>
-        </h1>
-        <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-          Easily automate your marketing campaigns, broadcast messages, track users, and streamline community operations directly from a unified cloud dashboard.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link href="/admin" className="w-full sm:w-auto text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 px-8 py-4 rounded-full transition-all shadow-xl shadow-indigo-600/20 flex items-center justify-center gap-2">
-            Get started <ArrowRight size={18} />
-          </Link>
-          <a href="#docs" className="w-full sm:w-auto text-base font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 px-8 py-4 rounded-full transition-all flex items-center justify-center gap-2">
-            <BookOpen size={18} /> View Documentation
-          </a>
-        </div>
-
-        {/* Dashboard Mockup */}
-        <div className="mt-20 relative max-w-5xl mx-auto">
-          <div className="rounded-2xl border border-slate-200/50 bg-white/50 backdrop-blur-sm p-4 shadow-2xl">
-            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-              <div className="h-12 bg-slate-50 border-b border-slate-100 flex items-center px-4 gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-400"></div>
-                <div className="w-3 h-3 rounded-full bg-amber-400"></div>
-                <div className="w-3 h-3 rounded-full bg-emerald-400"></div>
-                <div className="ml-4 h-6 w-48 bg-white border border-slate-200 rounded text-[10px] text-slate-400 flex items-center px-2">bot-admin.vercel.app</div>
-              </div>
-              <div className="p-8 grid md:grid-cols-3 gap-6 text-left">
-                <div className="col-span-2 space-y-4">
-                  <div className="h-6 w-48 bg-slate-100 rounded"></div>
-                  <div className="h-24 w-full bg-slate-50 border border-slate-100 rounded-lg"></div>
-                  <div className="h-10 w-32 bg-indigo-600 rounded-lg mt-2"></div>
-                </div>
-                <div className="space-y-4">
-                  <div className="h-24 w-full bg-slate-50 border border-slate-100 rounded-lg"></div>
-                  <div className="h-24 w-full bg-slate-50 border border-slate-100 rounded-lg"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section id="features" className="py-24 bg-white px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">Get the most out of our software</h2>
-            <p className="text-slate-600 max-w-2xl mx-auto text-lg">No matter what you need to orchestrate, our platform provides top-notch tools to help you manage your community and accelerate growth.</p>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="p-8 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-100 hover:bg-white hover:shadow-xl hover:shadow-indigo-500/5 transition-all group">
-              <div className="w-14 h-14 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-6 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                <Send size={24} />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-3">Marketing Bot</h3>
-              <p className="text-slate-600 leading-relaxed">Easily automate your marketing campaigns, broadcast announcements, and directly engage with your Telegram audience using our smart broadcasting engine.</p>
-            </div>
-
-            <div className="p-8 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-100 hover:bg-white hover:shadow-xl hover:shadow-indigo-500/5 transition-all group">
-              <div className="w-14 h-14 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-6 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                <Users size={24} />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-3">Customer Management</h3>
-              <p className="text-slate-600 leading-relaxed">Powerful customer relationship management (CRM) integration using Supabase. Capture user details securely and track their interactions seamlessly.</p>
-            </div>
-
-            <div className="p-8 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-100 hover:bg-white hover:shadow-xl hover:shadow-indigo-500/5 transition-all group">
-              <div className="w-14 h-14 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-6 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                <Shield size={24} />
-              </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-3">Serverless Scale</h3>
-              <p className="text-slate-600 leading-relaxed">A cloud-based architecture built on Vercel Edge Runtime. It scales instantly to handle high-volume webhook requests without performance bottlenecks.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Developer Docs Section */}
-      <section id="docs" className="py-24 px-6 bg-slate-900 text-slate-300">
-        <div className="max-w-4xl mx-auto space-y-12">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-white mb-4">Developer Setup & Documentation</h2>
-            <p className="text-slate-400 text-lg">Everything you need to know about the technical architecture, deployment workflow, and database setup.</p>
-          </div>
-
-          <div className="space-y-8">
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 md:p-8">
-              <h3 className="text-xl font-bold text-white flex items-center gap-3 mb-4">
-                <Layers className="text-indigo-400" /> 1. Project Folder Structure
-              </h3>
-              <p className="mb-6 text-slate-400 text-sm">Vercel automatically detects Serverless Functions exactly when they are inside an <code className="text-indigo-300">api/</code> directory. Keep the structure simple:</p>
-              <div className="bg-[#0f111a] rounded-xl overflow-hidden border border-slate-700">
-                <pre className="p-5 font-mono text-xs overflow-x-auto text-slate-300"><code>{structureCode}</code></pre>
-              </div>
-            </div>
-
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 md:p-8">
-              <h3 className="text-xl font-bold text-white flex items-center gap-3 mb-4">
-                <Globe className="text-indigo-400" /> 2. Webhook Deployment Instructions
-              </h3>
-              <ol className="list-decimal list-inside space-y-4 text-sm text-slate-400 ml-2">
-                <li><strong className="text-slate-200">Deploy to Vercel:</strong> Push this folder to GitHub and import it into Vercel.</li>
-                <li><strong className="text-slate-200">Environment Variables:</strong> Add <code className="text-indigo-300">TELEGRAM_BOT_TOKEN</code> and <code className="text-indigo-300">TELEGRAM_ADMIN_GROUP_ID</code> in settings.</li>
-                <li><strong className="text-slate-200">Set the Webhook:</strong> Since long polling doesn't work in Serverless, use this URL format in your browser:
-                  <div className="mt-3 p-4 bg-[#0f111a] border border-slate-700 rounded-lg break-all font-mono text-xs text-indigo-400">
-                    https://api.telegram.org/bot&lt;YOUR_BOT_TOKEN&gt;/setWebhook?url=https://&lt;YOUR_VERCEL_DOMAIN&gt;/api/bot
-                  </div>
-                </li>
-              </ol>
-            </div>
-
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 md:p-8">
-              <h3 className="text-xl font-bold text-white flex items-center gap-3 mb-4">
-                <BookOpen className="text-indigo-400" /> 3. AI Knowledge Base Note
-              </h3>
-              <div className="space-y-4 text-sm">
-                <p className="text-slate-400">ដោយសារតែរចនាសម្ព័ន្ធរបស់កម្មវិធីនេះជា <strong>Serverless</strong> នៅលើ Vercel, ការដាក់ឯកសារដើម្បីឲ្យ Bot រៀន (AI Knowledge Base) មានជម្រើសសំខាន់ៗ៖</p>
-                <div className="grid md:grid-cols-2 gap-4 mt-6">
-                  <div className="p-5 rounded-xl border border-slate-700 bg-slate-800/80">
-                    <h4 className="font-bold text-white mb-2">Static Text / Prompts</h4>
-                    <p className="text-slate-400 text-sm leading-relaxed">ប្រើ <code className="text-indigo-300 px-1 py-0.5 rounded">fs.readFileSync</code> ដើម្បីអានឯកសារ <code className="text-indigo-300 px-1 py-0.5 rounded">.txt/.json</code> ក្នុងកូដ សម្រាប់ទិន្នន័យតូចៗ រួចបញ្ជូនទៅកាន់ LLM (Gemini) ជា context។</p>
-                  </div>
-                  <div className="p-5 rounded-xl border border-slate-700 bg-slate-800/80">
-                    <h4 className="font-bold text-white mb-2">Vector Databases (RAG)</h4>
-                    <p className="text-slate-400 text-sm leading-relaxed">សម្រាប់ឯកសារធំៗ (PDFs, Docs), បំប្លែងទៅជា Embeddings ហើយរក្សាទុកក្នុង Supabase pgvector រួចទាញយកព័ត៌មានដែលពាក់ព័ន្ធនៅពេល Bot ឆ្លើយតប។</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer CTA */}
-      <section className="py-24 px-6 text-center bg-indigo-600 text-white relative overflow-hidden">
-         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl"></div>
-         <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-black opacity-20 rounded-full blur-3xl"></div>
-         <div className="max-w-3xl mx-auto relative z-10">
-          <h2 className="text-4xl md:text-5xl font-bold mb-6 tracking-tight">Ready to streamline your operations?</h2>
-          <p className="text-indigo-100 text-lg md:text-xl mb-10">Deploy your custom Telegram bot and manage your audience straight from a comprehensive dashboard.</p>
-          <Link href="/admin" className="inline-flex text-base font-semibold text-indigo-700 bg-white hover:bg-slate-50 px-8 py-4 rounded-full transition-all shadow-xl shadow-black/10 items-center justify-center gap-2">
-            Go to Admin Dashboard <ArrowRight size={18} />
-          </Link>
-         </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-10 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-slate-500">
-          <div className="flex items-center gap-2 font-bold text-slate-900 text-lg">
-             <Bot size={24} className="text-indigo-600" /> BotManager
-          </div>
-          <p>© {new Date().getFullYear()} Telegram Bot Manager SaaS. Built with Next.js & Supabase.</p>
-        </div>
-      </footer>
+      {/* SUCCESS ANIMATION OVERLAY */}
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+          >
+            <motion.div
+              initial={{ scale: 0.8, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.8, y: 20 }}
+              className="bg-white rounded-3xl p-8 flex flex-col items-center justify-center max-w-sm w-full shadow-2xl"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 200, delay: 0.1 }}
+                className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6 text-emerald-600"
+              >
+                <CheckCircle2 className="w-10 h-10" />
+              </motion.div>
+              <h3 className="text-xl font-bold text-slate-800 text-center mb-2">ជោគជ័យ!</h3>
+              <p className="text-slate-600 text-center text-sm font-medium leading-relaxed">
+                {successMessage}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
