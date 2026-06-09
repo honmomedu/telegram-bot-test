@@ -154,6 +154,15 @@ export default function AdminDashboard() {
     `${e.code} ${e.name} ${e.department || ''}`.toLowerCase().includes(search.toLowerCase()),
   );
 
+  // Load saved office coordinates (runs regardless of how admin authed)
+  useEffect(() => {
+     fetch('/api/office-config').then(res => res.json()).then(data => {
+         if (data.lat) setOfficeLat(data.lat.toString());
+         if (data.lng) setOfficeLng(data.lng.toString());
+         if (data.radius) setOfficeRadius(data.radius.toString());
+     }).catch(e => console.error(e));
+  }, []);
+
   useEffect(() => {
      // Returning admin (already logged in this session)
      if (typeof window !== 'undefined' && sessionStorage.getItem('secure_attend_admin') === '1') {
@@ -182,15 +191,6 @@ export default function AdminDashboard() {
      };
 
      verifyAdmin();
-
-     if (typeof window !== 'undefined') {
-       // Fetch Office Coordinates from API
-       fetch('/api/office-config').then(res => res.json()).then(data => {
-           if (data.lat) setOfficeLat(data.lat.toString());
-           if (data.lng) setOfficeLng(data.lng.toString());
-           if (data.radius) setOfficeRadius(data.radius.toString());
-       }).catch(e => console.error(e));
-     }
   }, []);
 
   const handleSaveSettings = (e: React.FormEvent) => {
