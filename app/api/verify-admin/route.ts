@@ -1,30 +1,39 @@
 import { NextResponse } from 'next/server';
 
+// Admin access can be granted two ways:
+//   1) Password login (works in any browser) — ADMIN_PASSWORD
+//   2) Telegram WebApp identity — ADMIN_TELEGRAM_ID
+// If NEITHER is configured, access is allowed (debug/first-run convenience).
 export async function POST(req: Request) {
   try {
-    const { telegramId } = await req.json();
-    
-    // In production, ensure this token is set securely in your environment variables.
+    const { telegramId, password } = await req.json().catch(() => ({}));
+
     const adminId = process.env.ADMIN_TELEGRAM_ID;
+    // Default password so a fresh deploy is usable; CHANGE via env on Vercel.
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    const hasAnyAuth = !!adminId || !!process.env.ADMIN_PASSWORD;
 
-    // Optional: Only apply strictly if there is an ADMIN_TELEGRAM_ID defined
-    // During local prototyping if you test without EV, you might want to allow it.
-    // For safety, we block unless matched.
-    if (!adminId) {
-       console.warn("Server warning: ADMIN_TELEGRAM_ID is empty in environment. Allowing admin access for debugging.");
-       return NextResponse.json({ isAdmin: true, _mock: true, message: 'Simulated admin access (Missing ADMIN_TELEGRAM_ID in Vercel/environment).' });
+    // Password path (browser login)
+    if (password != null && password !== '') {
+      if (password === adminPassword) {
+        return NextResponse.json({ isAdmin: true, via: 'password' });
+      }
+      return NextResponse.json({ isAdmin: false, message: 'ពាក្យសម្ងាត់មិនត្រឹមត្រូវ។' });
     }
 
-    if (!telegramId) {
-      return NextResponse.json({ isAdmin: false, message: 'Missing Telegram ID' });
+    // Telegram path (auto inside the Mini App)
+    if (telegramId && adminId && telegramId.toString() === adminId.toString()) {
+      return NextResponse.json({ isAdmin: true, via: 'telegram' });
     }
 
-    if (telegramId.toString() === adminId.toString()) {
-       return NextResponse.json({ isAdmin: true, message: 'Admin verified.' });
+    // First-run convenience: nothing configured at all -> allow
+    if (!hasAnyAuth) {
+      return NextResponse.json({ isAdmin: true, via: 'open', _warning: 'No ADMIN_PASSWORD/ADMIN_TELEGRAM_ID set.' });
     }
 
-    return NextResponse.json({ isAdmin: false, message: 'Access denied. You are not the admin.' });
+    // Otherwise require an explicit login
+    return NextResponse.json({ isAdmin: false, requiresLogin: true });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ isAdmin: false, error: error.message }, { status: 500 });
   }
 }

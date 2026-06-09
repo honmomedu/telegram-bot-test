@@ -51,7 +51,33 @@ export default function AdminDashboard() {
 
   // Auth State
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [authMsg, setAuthMsg] = useState('កំពុងផ្ទៀងផ្ទាត់សិទ្ធិ (Verifying Admin)...');
+  const [password, setPassword] = useState('');
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  const handlePasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoggingIn(true);
+    setLoginError(null);
+    try {
+      const res = await fetch('/api/verify-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (data.isAdmin) {
+        sessionStorage.setItem('secure_attend_admin', '1');
+        setIsAdmin(true);
+      } else {
+        setLoginError(data.message || 'ពាក្យសម្ងាត់មិនត្រឹមត្រូវ។');
+      }
+    } catch {
+      setLoginError('មានបញ្ហាបណ្ដាញ។');
+    } finally {
+      setLoggingIn(false);
+    }
+  };
 
   // Employees
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -129,7 +155,13 @@ export default function AdminDashboard() {
   );
 
   useEffect(() => {
-     // Admin verification using Telegram WebApp data
+     // Returning admin (already logged in this session)
+     if (typeof window !== 'undefined' && sessionStorage.getItem('secure_attend_admin') === '1') {
+         setIsAdmin(true);
+         return;
+     }
+
+     // Try Telegram WebApp auto-auth; otherwise fall through to the login form
      const verifyAdmin = async () => {
          let tgId = null;
          if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) {
@@ -143,13 +175,9 @@ export default function AdminDashboard() {
                  body: JSON.stringify({ telegramId: tgId })
              });
              const data = await res.json();
-             setIsAdmin(data.isAdmin);
-             if (!data.isAdmin) {
-                 setAuthMsg('អ្នកមិនមានសិទ្ធិចូលផ្ទាំងនេះទេ! (Access Denied). សូមចូលតាម Telegram Bot ដែលមានសិទ្ធិជា Admin។');
-             }
+             setIsAdmin(!!data.isAdmin);
          } catch (e) {
              setIsAdmin(false);
-             setAuthMsg('មានបញ្ហាក្នុងការផ្ទៀងផ្ទាត់សិទ្ធិ។');
          }
      };
 
@@ -196,20 +224,43 @@ export default function AdminDashboard() {
     }
   };
 
-  if (isAdmin === null || isAdmin === false) {
+  if (isAdmin === null) {
       return (
          <div className="min-h-screen flex items-center justify-center bg-ambient p-4 font-sans">
-             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 max-w-md text-center">
-                 {isAdmin === null ? (
-                     <div className="animate-pulse text-indigo-600 font-medium">កំពុងផ្ទៀងផ្ទាត់សិទ្ធិ...</div>
-                 ) : (
-                     <>
-                        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                        <h2 className="text-xl font-bold text-slate-900 mb-2">គ្មានសិទ្ធិអនុញ្ញាត</h2>
-                        <p className="text-slate-500">{authMsg}</p>
-                        <Link href="/" className="inline-block mt-6 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition">ត្រឡប់ទៅទំព័រដើម</Link>
-                     </>
-                 )}
+             <Loader2 className="w-7 h-7 text-brand-400 animate-spin" />
+         </div>
+      );
+  }
+
+  if (isAdmin === false) {
+      return (
+         <div className="min-h-screen flex items-center justify-center bg-ambient p-6 font-sans">
+             <div className="w-full max-w-sm">
+                 <div className="flex flex-col items-center text-center mb-7">
+                     <div className="w-16 h-16 rounded-3xl brand-gradient flex items-center justify-center shadow-glow-brand mb-4">
+                         <ShieldCheck className="w-8 h-8 text-white" />
+                     </div>
+                     <h1 className="text-2xl font-bold tracking-tight text-slate-900">SecureAttend Admin</h1>
+                     <p className="text-sm text-slate-500 mt-1">ផ្ទាំងគ្រប់គ្រងប្រព័ន្ធ</p>
+                 </div>
+                 <form onSubmit={handlePasswordLogin} className="bg-white rounded-3xl shadow-card border border-slate-100 p-6 space-y-4">
+                     <label className="block text-sm font-bold text-slate-700">ពាក្យសម្ងាត់ Admin</label>
+                     <input
+                         autoFocus
+                         type="password"
+                         value={password}
+                         onChange={(e) => setPassword(e.target.value)}
+                         placeholder="••••••••"
+                         className="w-full px-4 py-3.5 rounded-2xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:outline-none transition text-center text-lg tracking-widest"
+                     />
+                     {loginError && (
+                         <p className="text-sm text-red-600 flex items-center justify-center gap-1.5"><AlertCircle size={14} /> {loginError}</p>
+                     )}
+                     <button type="submit" disabled={loggingIn || !password} className="w-full brand-gradient disabled:opacity-50 text-white py-3.5 rounded-2xl font-bold shadow-glow-brand active:scale-95 transition flex items-center justify-center gap-2">
+                         {loggingIn ? <><Loader2 className="w-5 h-5 animate-spin" /> កំពុងចូល...</> : 'ចូលប្រើ'}
+                     </button>
+                     <Link href="/" className="block text-center text-xs text-slate-400 hover:text-slate-600 transition pt-1">ត្រឡប់ទៅទំព័រដើម</Link>
+                 </form>
              </div>
          </div>
       );
@@ -256,9 +307,12 @@ export default function AdminDashboard() {
             </button>
         </div>
         <div className="p-4 border-t border-slate-800">
-            <Link href="/" className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
-                <LogOut size={16} /> ត្រឡប់ទៅកម្មវិធីបញ្ជិកា
-            </Link>
+            <button
+                onClick={() => { sessionStorage.removeItem('secure_attend_admin'); setIsAdmin(false); setPassword(''); }}
+                className="w-full flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+            >
+                <LogOut size={16} /> ចាកចេញ (Logout)
+            </button>
         </div>
       </aside>
 
