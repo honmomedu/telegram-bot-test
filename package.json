@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^5.2.1",
     "@supabase/supabase-js": "^2.107.0",
     "@types/leaflet": "^1.9.21",
+    "@yudiel/react-qr-scanner": "^2.6.0",
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

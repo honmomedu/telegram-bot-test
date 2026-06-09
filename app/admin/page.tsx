@@ -19,12 +19,62 @@ const mockEmployees: Employee[] = [
 ];
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'employees' | 'settings'>('employees');
+  const [activeTab, setActiveTab] = useState<'employees' | 'settings' | 'system'>('employees');
   
   // Settings Tab
   const [telegramToken, setTelegramToken] = useState('');
   const [telegramChatId, setTelegramChatId] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
+
+  // System Tab (Office Coordinates)
+  const [officeLat, setOfficeLat] = useState('11.5564');
+  const [officeLng, setOfficeLng] = useState('104.9282');
+  const [officeRadius, setOfficeRadius] = useState('100');
+  const [sysSaveStatus, setSysSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
+
+  // Auth State
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [authMsg, setAuthMsg] = useState('កំពុងផ្ទៀងផ្ទាត់សិទ្ធិ (Verifying Admin)...');
+
+  useEffect(() => {
+     // Admin verification using Telegram WebApp data
+     const verifyAdmin = async () => {
+         let tgId = null;
+         if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) {
+             tgId = (window as any).Telegram.WebApp.initDataUnsafe.user.id;
+         }
+
+         try {
+             const res = await fetch('/api/verify-admin', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ telegramId: tgId })
+             });
+             const data = await res.json();
+             setIsAdmin(data.isAdmin);
+             if (!data.isAdmin) {
+                 setAuthMsg('អ្នកមិនមានសិទ្ធិចូលផ្ទាំងនេះទេ! (Access Denied). សូមចូលតាម Telegram Bot ដែលមានសិទ្ធិជា Admin។');
+             }
+         } catch (e) {
+             setIsAdmin(false);
+             setAuthMsg('មានបញ្ហាក្នុងការផ្ទៀងផ្ទាត់សិទ្ធិ។');
+         }
+     };
+
+     verifyAdmin();
+
+     if (typeof window !== 'undefined') {
+       const coordsStr = localStorage.getItem('secure_attend_office_coords');
+       if (coordsStr) {
+         try {
+           const coords = JSON.parse(coordsStr);
+           if (coords.lat) setOfficeLat(coords.lat.toString());
+           if (coords.lng) setOfficeLng(coords.lng.toString());
+           if (coords.radius) setOfficeRadius(coords.radius.toString());
+         } catch (e) {}
+       }
+     }
+  }, []);
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +85,39 @@ export default function AdminDashboard() {
        setTimeout(() => setSaveStatus('idle'), 3000);
     }, 1000);
   };
+
+  const handleSaveSystemSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSysSaveStatus('saving');
+    setTimeout(() => {
+       localStorage.setItem('secure_attend_office_coords', JSON.stringify({
+           lat: parseFloat(officeLat) || 11.5564,
+           lng: parseFloat(officeLng) || 104.9282,
+           radius: parseFloat(officeRadius) || 100
+       }));
+       setSysSaveStatus('success');
+       setTimeout(() => setSysSaveStatus('idle'), 3000);
+    }, 800);
+  };
+
+  if (isAdmin === null || isAdmin === false) {
+      return (
+         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans">
+             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 max-w-md text-center">
+                 {isAdmin === null ? (
+                     <div className="animate-pulse text-indigo-600 font-medium">កំពុងផ្ទៀងផ្ទាត់សិទ្ធិ...</div>
+                 ) : (
+                     <>
+                        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                        <h2 className="text-xl font-bold text-slate-900 mb-2">គ្មានសិទ្ធិអនុញ្ញាត</h2>
+                        <p className="text-slate-500">{authMsg}</p>
+                        <Link href="/" className="inline-block mt-6 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition">ត្រឡប់ទៅទំព័រដើម</Link>
+                     </>
+                 )}
+             </div>
+         </div>
+      );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans selection:bg-indigo-100 selection:text-indigo-900">
@@ -60,7 +143,10 @@ export default function AdminDashboard() {
             >
                 <Bell size={18} /> Telegram Notifications
             </button>
-            <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium hover:bg-slate-800 hover:text-white transition-colors opacity-50 cursor-not-allowed">
+            <button 
+                onClick={() => setActiveTab('system')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'system' ? 'bg-indigo-600/10 text-indigo-400' : 'hover:bg-slate-800 hover:text-white'}`}
+            >
                 <Settings size={18} /> ប្រព័ន្ធ (System)
             </button>
         </div>
@@ -79,6 +165,7 @@ export default function AdminDashboard() {
           <div className="flex gap-2">
              <button onClick={() => setActiveTab('employees')} className={`p-2 rounded ${activeTab === 'employees' ? 'bg-slate-800 hover:bg-slate-800 text-indigo-400' : 'hover:bg-slate-800'}`}><Users size={20}/></button>
              <button onClick={() => setActiveTab('settings')} className={`p-2 rounded ${activeTab === 'settings' ? 'bg-slate-800 hover:bg-slate-800 text-indigo-400' : 'hover:bg-slate-800'}`}><Bell size={20}/></button>
+             <button onClick={() => setActiveTab('system')} className={`p-2 rounded ${activeTab === 'system' ? 'bg-slate-800 hover:bg-slate-800 text-indigo-400' : 'hover:bg-slate-800'}`}><Settings size={20}/></button>
           </div>
       </div>
 
@@ -213,6 +300,83 @@ export default function AdminDashboard() {
                                    <>កំពុងរក្សាទុក...</>
                                ) : (
                                    <>រក្សាទុកការកំណត់</>
+                               )}
+                           </button>
+                       </div>
+                   </form>
+                </div>
+            </div>
+        )}
+
+        {activeTab === 'system' && (
+            <div className="space-y-6 max-w-2xl animate-in fade-in duration-300">
+                <header>
+                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">ការកំណត់ប្រព័ន្ធ (System Settings)</h2>
+                   <p className="text-slate-500 mt-1">កំណត់ទីតាំងការិយាល័យ (Office Location) និងរយៈចម្ងាយអនុញ្ញាត (Radius)</p>
+                </header>
+
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
+                   <div className="flex items-start gap-4 p-4 bg-amber-50 text-amber-900 rounded-lg border border-amber-100">
+                       <AlertCircle className="w-6 h-6 shrink-0 mt-0.5" />
+                       <div className="text-sm border-amber-200">
+                           <p className="font-semibold mb-1">បញ្ជាក់:</p>
+                           <p className="opacity-90">អ្នកអាចចូលទៅកាន់ Google Maps ដើម្បីថតចម្លង (Copy) តម្លៃ Latitude និង Longitude ការិយាល័យរបស់អ្នករួចយកមកផាស (Paste) នៅទីនេះ។</p>
+                       </div>
+                   </div>
+
+                   <form onSubmit={handleSaveSystemSettings} className="space-y-5">
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                           <div>
+                               <label className="block text-sm font-medium text-slate-700 mb-1">Latitude</label>
+                               <input 
+                                   type="number" step="any"
+                                   value={officeLat}
+                                   onChange={(e) => setOfficeLat(e.target.value)}
+                                   placeholder="ឧ. 11.5564"
+                                   className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-600 focus:outline-none transition font-mono text-sm"
+                               />
+                           </div>
+                           <div>
+                               <label className="block text-sm font-medium text-slate-700 mb-1">Longitude</label>
+                               <input 
+                                   type="number" step="any"
+                                   value={officeLng}
+                                   onChange={(e) => setOfficeLng(e.target.value)}
+                                   placeholder="ឧ. 104.9282"
+                                   className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-600 focus:outline-none transition font-mono text-sm"
+                               />
+                           </div>
+                       </div>
+
+                       <div>
+                           <label className="block text-sm font-medium text-slate-700 mb-1">រយៈចម្ងាយអនុញ្ញាត (Radius in Meters)</label>
+                           <input 
+                               type="number" 
+                               value={officeRadius}
+                               onChange={(e) => setOfficeRadius(e.target.value)}
+                               placeholder="ឧ. 100"
+                               className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-600 focus:outline-none transition font-mono text-sm"
+                           />
+                           <p className="text-xs text-slate-500 mt-2">ចម្ងាយអតិបរមាពីទីតាំងដែលកំណត់ខាងលើ ដែលអាចអនុញ្ញាតកម្មវិធីបញ្ជិកា Check-IN/OUT បាន។</p>
+                       </div>
+
+                       {sysSaveStatus === 'success' && (
+                           <div className="p-3 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-sm flex items-center gap-2">
+                               <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                               បានរក្សាទុកទីតាំងយ៉ាងជោគជ័យ!
+                           </div>
+                       )}
+
+                       <div className="flex justify-end pt-4 border-t border-slate-100">
+                           <button 
+                               type="submit"
+                               disabled={sysSaveStatus === 'saving'}
+                               className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg shadow-sm transition flex items-center gap-2"
+                           >
+                               {sysSaveStatus === 'saving' ? (
+                                   <>កំពុងរក្សាទុក...</>
+                               ) : (
+                                   <>រក្សាទុុកការកំណត់</>
                                )}
                            </button>
                        </div>

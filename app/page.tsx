@@ -1,14 +1,16 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Camera, MapPin, Clock, History as HistoryIcon, ShieldCheck, UserCheck, CheckCircle2, XCircle, RefreshCw, Info, AlertTriangle, SwitchCamera, Navigation, Image as ImageIcon, X } from 'lucide-react';
+import { Camera, MapPin, Clock, History as HistoryIcon, ShieldCheck, UserCheck, CheckCircle2, XCircle, RefreshCw, Info, AlertTriangle, SwitchCamera, Navigation, Image as ImageIcon, X, QrCode, Settings } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'motion/react';
+import { Scanner } from '@yudiel/react-qr-scanner';
+import Link from 'next/link';
 
 const MapComponent = dynamic(() => import('../components/Map'), { ssr: false });
 
-// Office Coordinates (Example: Central Phnom Penh)
-const OFFICE_COORDS = { lat: 11.5564, lng: 104.9282 }; 
-const ALLOWED_RADIUS_METERS = 100;
+// Default Office Coordinates (Central Phnom Penh)
+const DEFAULT_OFFICE_COORDS = { lat: 11.5564, lng: 104.9282 }; 
+const DEFAULT_ALLOWED_RADIUS_METERS = 100;
 
 // Haversine formula to calculate distance directly on the client
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -29,6 +31,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'attend' | 'history' | 'info'>('attend');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [officeCoords, setOfficeCoords] = useState(DEFAULT_OFFICE_COORDS);
+  const [allowedRadius, setAllowedRadius] = useState(DEFAULT_ALLOWED_RADIUS_METERS);
   const [distance, setDistance] = useState<number | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isWithinRadius, setIsWithinRadius] = useState(false);
@@ -40,16 +44,30 @@ export default function App() {
   const [cameraActive, setCameraActive] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
   const [actionType, setActionType] = useState<'IN' | 'OUT' | null>(null);
+  const [verifyMethod, setVerifyMethod] = useState<'camera' | 'qr'>('camera');
+  const [qrActionType, setQrActionType] = useState<'IN' | 'OUT' | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   
   // Mock History
   const [history, setHistory] = useState<any[]>([]);
   const [isClient, setIsClient] = useState(false);
+  const [tgUser, setTgUser] = useState<{name: string, id: string | null}>({name: 'ភ្ញៀវអនាមិក (Guest)', id: null});
 
   // Real-time clock update & History Load
   useEffect(() => {
     setIsClient(true);
+    
+    // Telegram Web App init
+    if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) {
+        const user = (window as any).Telegram.WebApp.initDataUnsafe.user;
+        setTgUser({
+           name: `${user.first_name} ${user.last_name || ''}`.trim(),
+           id: user.id
+        });
+        (window as any).Telegram.WebApp.ready();
+    }
+    
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     
     try {
@@ -57,8 +75,19 @@ export default function App() {
       if (storedHistory) {
         setHistory(JSON.parse(storedHistory));
       }
+
+      const storedCoordsStr = localStorage.getItem('secure_attend_office_coords');
+      if (storedCoordsStr) {
+        const storedCoords = JSON.parse(storedCoordsStr);
+        if (storedCoords.lat && storedCoords.lng) {
+          setOfficeCoords({ lat: parseFloat(storedCoords.lat), lng: parseFloat(storedCoords.lng) });
+        }
+        if (storedCoords.radius) {
+          setAllowedRadius(parseFloat(storedCoords.radius));
+        }
+      }
     } catch (e) {
-      console.error("Failed to load history:", e);
+      console.error("Failed to load local storage data:", e);
     }
     
     return () => clearInterval(timer);
@@ -82,9 +111,9 @@ export default function App() {
         setLocation({ lat: latitude, lng: longitude });
         
         // Calculate Distance using Haversine
-        const dist = calculateDistance(latitude, longitude, OFFICE_COORDS.lat, OFFICE_COORDS.lng);
+        const dist = calculateDistance(latitude, longitude, officeCoords.lat, officeCoords.lng);
         setDistance(dist);
-        setIsWithinRadius(dist <= ALLOWED_RADIUS_METERS);
+        setIsWithinRadius(dist <= allowedRadius);
         setIsLocating(false);
       },
       (err) => {
@@ -94,7 +123,7 @@ export default function App() {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
-  }, []);
+  }, [officeCoords.lat, officeCoords.lng, allowedRadius]);
 
   // Fetch location on mount
   useEffect(() => {
@@ -161,18 +190,22 @@ export default function App() {
     openCameraFlow(actionType!);
   };
 
-  const submitAttendance = async () => {
-    if (!photo || !actionType) return;
+  const submitAttendance = async (methodParam: 'camera' | 'qr' | any = 'camera', payloadData: string | null = null) => {
+    const method = methodParam === 'qr' ? 'qr' : 'camera';
+    const actType = method === 'camera' ? actionType : qrActionType;
+    if (!actType) return;
+    if (method === 'camera' && !photo && !payloadData) return;
     
     // Simulate current logged in user
-    const currentEmployeeName = "Sok San"; 
+    const currentEmployeeName = tgUser.name; 
 
     const newEntry = {
       id: Date.now(),
-      type: actionType,
+      type: actType,
       time: new Date().toISOString(),
       distance: distance?.toFixed(1) || '0',
-      photo: photo
+      photo: method === 'camera' ? (payloadData || photo) : null,
+      method: method
     };
     
     const updatedHistory = [newEntry, ...history].slice(0, 50); // Keep last 50 entries
@@ -196,7 +229,7 @@ export default function App() {
       console.error("Failed to save history or notify Telegram:", e);
     }
     
-    const msg = `កំណត់ត្រា ${actionType === 'IN' ? 'ចូលធ្វើការ' : 'ចេញពីធ្វើការ'} ត្រូវបានរក្សាទុកដោយជោគជ័យ! (ព្រមទាំងបានជូនដំណឹងទៅ Telegram)`;
+    const msg = `កំណត់ត្រា ${actType === 'IN' ? 'ចូលធ្វើការ' : 'ចេញពីធ្វើការ'} ត្រូវបានរក្សាទុកដោយជោគជ័យ! (ព្រមទាំងបានជូនដំណឹងទៅ Telegram)`;
     setSuccessMessage(msg);
     setShowSuccess(true);
     setTimeout(() => {
@@ -205,6 +238,20 @@ export default function App() {
 
     setPhoto(null);
     setActionType(null);
+    setQrActionType(null);
+  };
+
+  const handleQRScan = (results: any) => {
+     if (!results || results.length === 0) return;
+     const text = results[0]?.rawValue || results[0]?.text || results?.text || results;
+     if (typeof text !== 'string') return;
+
+     if (text === 'SECURE_ATTEND_OFFICE_QR_2026') {
+         submitAttendance('qr', text);
+     } else {
+         alert('QR Code មិនត្រឹមត្រូវទេ! (តម្រូវឲ្យស្កេន QR ការិយាល័យ)');
+         setQrActionType(null);
+     }
   };
 
   return (
@@ -215,8 +262,9 @@ export default function App() {
           <ShieldCheck className="w-6 h-6 text-indigo-200" />
           <h1 className="text-lg font-bold">SecureAttend</h1>
         </div>
-        <div className="text-sm font-medium opacity-90">
-          នាយកដ្ឋាន IT
+        <div className="text-sm font-medium opacity-90 flex items-center gap-2">
+          <UserCheck className="w-4 h-4 opacity-70" />
+          {tgUser.name}
         </div>
       </header>
 
@@ -269,13 +317,13 @@ export default function App() {
                           {isWithinRadius ? 'ស្ថិតក្នុងតំបន់អនុញ្ញាត' : 'នៅឆ្ងាយពីការិយាល័យ'}
                         </p>
                         <p className={`text-sm font-medium mt-0.5 ${isWithinRadius ? 'text-emerald-600' : 'text-red-600'}`}>
-                          ចម្ងាយ៖ {distance.toFixed(0)} ម៉ែត្រ (អនុញ្ញាត {ALLOWED_RADIUS_METERS}m)
+                          ចម្ងាយ៖ {distance.toFixed(0)} ម៉ែត្រ (អនុញ្ញាត {allowedRadius}m)
                         </p>
                       </div>
                     </div>
                   </div>
                   <div className="mt-4">
-                    <MapComponent officeCoords={OFFICE_COORDS} userCoords={location} radius={ALLOWED_RADIUS_METERS} />
+                    <MapComponent officeCoords={officeCoords} userCoords={location} radius={allowedRadius} />
                   </div>
                 </>
               ) : (
@@ -285,11 +333,21 @@ export default function App() {
               )}
             </div>
 
+            {/* Verification Method Toggle */}
+            <div className="flex bg-slate-100 p-1 rounded-xl mt-2">
+               <button onClick={() => setVerifyMethod('camera')} className={`flex-1 py-2.5 flex justify-center items-center gap-2 text-sm font-bold rounded-lg transition-colors ${verifyMethod === 'camera' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>
+                  <Camera className="w-4 h-4" /> ថតមុខ (Selfie)
+               </button>
+               <button onClick={() => setVerifyMethod('qr')} className={`flex-1 py-2.5 flex justify-center items-center gap-2 text-sm font-bold rounded-lg transition-colors ${verifyMethod === 'qr' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>
+                  <QrCode className="w-4 h-4" /> ស្កេន QR
+               </button>
+            </div>
+
             {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-4 mt-2">
               <button 
                 disabled={!isWithinRadius}
-                onClick={() => openCameraFlow('IN')}
+                onClick={() => verifyMethod === 'camera' ? openCameraFlow('IN') : setQrActionType('IN')}
                 className="bg-emerald-600 text-white disabled:bg-slate-300 disabled:text-slate-500 py-4 rounded-2xl font-bold shadow-sm shadow-emerald-600/20 active:scale-95 transition-all flex flex-col items-center justify-center gap-2"
               >
                 <div className="bg-white/20 p-2 rounded-full"><UserCheck className="w-6 h-6" /></div>
@@ -298,7 +356,7 @@ export default function App() {
 
               <button 
                 disabled={!isWithinRadius}
-                onClick={() => openCameraFlow('OUT')}
+                onClick={() => verifyMethod === 'camera' ? openCameraFlow('OUT') : setQrActionType('OUT')}
                 className="bg-amber-500 text-white disabled:bg-slate-300 disabled:text-slate-500 py-4 rounded-2xl font-bold shadow-sm shadow-amber-500/20 active:scale-95 transition-all flex flex-col items-center justify-center gap-2"
               >
                 <div className="bg-black/10 p-2 rounded-full"><Clock className="w-6 h-6" /></div>
@@ -307,7 +365,7 @@ export default function App() {
             </div>
             
             {!isWithinRadius && distance !== null && !locationError && (
-              <p className="text-xs text-center text-slate-500 font-medium">អ្នកត្រូវតែស្ថិតនៅក្នុងរយៈចម្ងាយ 100 ម៉ែត្រការិយាល័យ</p>
+              <p className="text-xs text-center text-slate-500 font-medium">អ្នកត្រូវតែស្ថិតនៅក្នុងរយៈចម្ងាយ {allowedRadius} ម៉ែត្រការិយាល័យ</p>
             )}
           </div>
         )}
@@ -328,11 +386,16 @@ export default function App() {
                   <div key={record.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {/* Thumbnail Placeholder representing stored photo */}
-                      <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden relative break-inside-avoid">
-                        {record.photo ? 
-                          <img src={record.photo} alt="Verification" className="object-cover w-full h-full" /> : 
-                          <ImageIcon className="w-5 h-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-300" />
-                        }
+                      <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden relative break-inside-avoid flex items-center justify-center">
+                        {record.method === 'qr' ? (
+                           <div className="w-full h-full bg-indigo-50 flex items-center justify-center text-indigo-500">
+                              <QrCode className="w-6 h-6" />
+                           </div>
+                        ) : record.photo ? (
+                          <img src={record.photo} alt="Verification" className="object-cover w-full h-full" /> 
+                        ) : (
+                          <ImageIcon className="w-5 h-5 text-slate-300" />
+                        )}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
@@ -387,6 +450,16 @@ export default function App() {
               <p className="text-sm text-slate-600 leading-relaxed font-medium">
                 មិនអនុញ្ញាតឱ្យប្រើ <code>&lt;input type="file" /&gt;</code> ឡើយ ដើម្បីហាមការ Upload រូបកាត់តចូល។ យើងបញ្ជាយកត្រឹមតែកាមេរ៉ាមុខ (Front Face Camera) ផ្ទាល់ (<code>navigator.mediaDevices.getUserMedia</code>) ដោយទាញចេញជាផ្ទាំង Canvas Base64 រួចទើបបម្លែងអាប់ឡូតទៅកាន់ Cloud Storage។
               </p>
+            </div>
+
+            {/* Admin Link */}
+            <div className="bg-slate-900 rounded-2xl shadow-sm border border-slate-800 p-5 mt-6 text-white text-center">
+              <ShieldCheck className="w-8 h-8 mx-auto text-indigo-400 mb-2" />
+              <h3 className="font-bold">សម្រាប់អ្នកគ្រប់គ្រង (Admin)</h3>
+              <p className="text-sm text-slate-400 font-medium mt-1 mb-4">ចូលទៅកាន់ផ្ទាំងគ្រប់គ្រងប្រព័ន្ធ ដើម្បីកំណត់ទីតាំង និង Telegram។</p>
+              <Link href="/admin" className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl shadow-sm transition w-full">
+                 <Settings className="w-5 h-5" /> ចូលផ្ទាំងអ្នកគ្រប់គ្រង
+              </Link>
             </div>
           </div>
         )}
@@ -443,13 +516,36 @@ export default function App() {
                     ថតផ្ដើមម្ដងទៀត
                   </button>
                   <button 
-                    onClick={submitAttendance}
+                    onClick={() => submitAttendance('camera')}
                     className="flex-1 py-4 bg-emerald-600 rounded-2xl font-bold text-white shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
                   >
                     យល់ព្រម <CheckCircle2 className="w-5 h-5" />
                   </button>
                 </div>
               )}
+           </div>
+        </div>
+      )}
+
+      {/* FULLSCREEN QR OVERLAY */}
+      {qrActionType && (
+        <div className="fixed inset-0 bg-black z-50 flex flex-col slide-in-from-bottom-full animate-in duration-300">
+           <div className="p-4 flex items-center justify-between text-white font-medium bg-gradient-to-b from-black/80 to-transparent absolute top-0 w-full z-10">
+              <span>{qrActionType === 'IN' ? 'ឆែកចូល (Check IN)' : 'ឆែកចេញ (Check OUT)'} - ស្កេន QR</span>
+              <button onClick={() => setQrActionType(null)} className="p-2 bg-white/20 rounded-full hover:bg-white/30 backdrop-blur">
+                 <X className="w-5 h-5" />
+              </button>
+           </div>
+           
+           <div className="flex-1 flex flex-col items-center justify-center">
+               <div className="w-[80vw] h-[80vw] max-w-sm max-h-sm overflow-hidden rounded-3xl border-4 border-indigo-500 bg-slate-900">
+                   <Scanner onScan={handleQRScan} />
+               </div>
+           </div>
+           
+           <div className="bg-black text-white p-8 pb-12 flex flex-col items-center justify-center text-sm text-center">
+              <QrCode className="w-8 h-8 mb-4 text-indigo-400" />
+              ស្វែងរក QR Code របស់ការិយាល័យដើម្បីស្កេននិងផ្ទៀងផ្ទាត់វត្តមានរបស់អ្នក។
            </div>
         </div>
       )}
