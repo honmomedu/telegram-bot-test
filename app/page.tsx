@@ -389,7 +389,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-ambient font-sans text-slate-900 pb-16 safe-area-bottom">
+    <div className="flex flex-col h-[100dvh] bg-ambient font-sans text-slate-900 overflow-hidden">
       {/* Top App Header */}
       <header className="brand-gradient text-white px-4 py-3.5 shadow-glow-brand z-10 flex items-center justify-between relative overflow-hidden">
         {/* decorative glow */}
@@ -419,10 +419,37 @@ export default function App() {
       </header>
 
       {/* Main Scrollable Content */}
-      <main className="flex-1 overflow-y-auto w-full max-w-md mx-auto h-full sm:pt-4">
+      <main className="flex-1 overflow-y-auto w-full max-w-md mx-auto sm:pt-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))]">
         {/* TAB 1: ATTENDANCE */}
         {activeTab === 'attend' && (
           <div className="p-4 flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200">
+            {/* Greeting hero — account owner */}
+            <div className="flex items-center gap-3.5 pt-1">
+              <div className="relative shrink-0">
+                <div className="w-14 h-14 rounded-2xl overflow-hidden ring-2 ring-white shadow-card brand-gradient flex items-center justify-center">
+                  {enrollment?.photo ? (
+                    <img src={enrollment.photo} alt="" className="object-cover w-full h-full" />
+                  ) : (
+                    <span className="text-white text-xl font-bold">{(employee?.name || '?').trim().charAt(0)}</span>
+                  )}
+                </div>
+                {enrollment && (
+                  <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center ring-2 ring-white">
+                    <CheckCircle2 className="w-3 h-3 text-white" />
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-slate-500">
+                  {(() => { const h = currentTime.getHours(); return h < 12 ? 'អរុណសួស្តី ☀️' : h < 17 ? 'ទិវាសួស្តី 🌤️' : h < 19 ? 'សាយ័ណ្ហសួស្តី 🌇' : 'រាត្រីសួស្តី 🌙'; })()}
+                </p>
+                <h2 className="text-xl font-bold text-slate-900 truncate leading-tight">{employee?.name || 'បុគ្គលិក'}</h2>
+                <p className="text-xs text-slate-400 truncate">
+                  {employee?.department ? `${employee.department} · ` : ''}លេខ {employee?.code}
+                </p>
+              </div>
+            </div>
+
             {/* Clock Widget */}
             <div className="relative rounded-3xl p-6 flex flex-col items-center justify-center overflow-hidden bg-slate-900 text-white shadow-card">
               {/* ambient glows */}
