@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Users, AlertCircle, CheckCircle2, ShieldCheck, Settings, Bell, Search, UserPlus, LogOut, Download, QrCode } from 'lucide-react';
+import { Users, AlertCircle, CheckCircle2, ShieldCheck, Settings, Bell, Search, UserPlus, LogOut, Download, QrCode, MapPin } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
@@ -19,6 +19,24 @@ const mockEmployees: Employee[] = [
   { id: 'EMP-002', name: 'Chea Roth', department: 'HR', status: 'Active', lastActive: '2026-06-08T17:15:00' },
   { id: 'EMP-003', name: 'Nita Ly', department: 'Sales', status: 'Inactive', lastActive: '2026-06-01T10:00:00' },
 ];
+
+// Pull lat/lng out of almost any Google Maps URL or a directly-pasted
+// "lat, lng" pair. Returns null when nothing usable is found.
+function parseCoords(text: string): { lat: string; lng: string } | null {
+  if (!text) return null;
+  const t = text.trim();
+  const patterns = [
+    /@(-?\d+\.\d+),\s*(-?\d+\.\d+)/,            // .../@11.5564,104.9282,17z
+    /[?&](?:q|query|ll|sll|destination)=(-?\d+\.\d+),\s*(-?\d+\.\d+)/, // ?q=lat,lng
+    /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,           // place pages !3dLAT!4dLNG
+    /^\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/, // plain "lat, lng"
+  ];
+  for (const re of patterns) {
+    const m = t.match(re);
+    if (m) return { lat: m[1], lng: m[2] };
+  }
+  return null;
+}
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'employees' | 'qrcode' | 'settings' | 'system'>('employees');
@@ -343,36 +361,53 @@ export default function AdminDashboard() {
                    </div>
 
                    <form onSubmit={handleSaveSystemSettings} className="space-y-5">
-                       <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                           <label className="block text-sm font-medium text-slate-700 mb-1">បិទភ្ជាប់ Google Maps Link ទីនេះ (Paste link)</label>
+                       <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+                           <label className="block text-sm font-medium text-slate-700">បិទភ្ជាប់ Google Maps Link ឬ លេខ Coordinates (Paste)</label>
                            <div className="flex gap-2">
-                               <input 
+                               <input
                                    type="text"
                                    id="mapLinkInput"
-                                   placeholder="https://www.google.com/maps/place/..."
+                                   placeholder="ឧ. 11.5564, 104.9282  ឬ  https://maps.google.com/...@11.55,104.92"
+                                   onChange={(e) => {
+                                       const c = parseCoords(e.target.value);
+                                       if (c) { setOfficeLat(c.lat); setOfficeLng(c.lng); }
+                                   }}
                                    className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-indigo-600 focus:outline-none transition text-sm"
                                />
-                               <button 
+                               <button
                                    type="button"
                                    onClick={() => {
                                        const link = (document.getElementById('mapLinkInput') as HTMLInputElement).value;
-                                       const match = link.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-                                       const qMatch = link.match(/q=(-?\d+\.\d+),(-?\d+\.\d+)/);
-                                       if (match) {
-                                           setOfficeLat(match[1]);
-                                           setOfficeLng(match[2]);
-                                       } else if (qMatch) {
-                                           setOfficeLat(qMatch[1]);
-                                           setOfficeLng(qMatch[2]);
+                                       const c = parseCoords(link);
+                                       if (c) {
+                                           setOfficeLat(c.lat);
+                                           setOfficeLng(c.lng);
                                        } else {
-                                           alert('មិនអាចទាញយក Coordinates ពី Link នេះបានទេ! សូមសាកល្បង Copy URL ដែលវែង។');
+                                           alert('មិនអាចទាញយក Coordinates បានទេ!\n\nសូម៖\n• Long-press លើ Google Maps រួច copy លេខ (ឧ. 11.5564, 104.9282) មកដាក់ផ្ទាល់\n• ឬ ប្រើ link វែងពេញ (មាន @lat,lng) — កុំប្រើ link ខ្លី maps.app.goo.gl');
                                        }
                                    }}
                                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-medium rounded-lg shadow-sm transition whitespace-nowrap text-sm"
                                >
-                                   ទាញយក (Extract)
+                                   ទាញយក
                                </button>
                            </div>
+                           <button
+                               type="button"
+                               onClick={() => {
+                                   if (!navigator.geolocation) { alert('Browser មិនគាំទ្រ GPS ទេ'); return; }
+                                   navigator.geolocation.getCurrentPosition(
+                                       (pos) => { setOfficeLat(pos.coords.latitude.toFixed(6)); setOfficeLng(pos.coords.longitude.toFixed(6)); },
+                                       () => alert('មិនអាចទាញទីតាំងបានទេ។ សូមអនុញ្ញាតសិទ្ធិ Location។'),
+                                       { enableHighAccuracy: true, timeout: 15000 }
+                                   );
+                               }}
+                               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-sm transition text-sm"
+                           >
+                               <MapPin size={16} /> ប្រើទីតាំងបច្ចុប្បន្នរបស់ខ្ញុំ (GPS)
+                           </button>
+                           <p className="text-xs text-slate-500 leading-relaxed">
+                               ងាយបំផុត៖ ឈរនៅការិយាល័យ រួចចុចប៊ូតុងបៃតង "ប្រើទីតាំងបច្ចុប្បន្ន" ខាងលើ — វានឹងបំពេញ Latitude/Longitude ស្វ័យប្រវត្តិ។
+                           </p>
                        </div>
 
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
