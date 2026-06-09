@@ -1,12 +1,15 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Camera, MapPin, Clock, History as HistoryIcon, ShieldCheck, UserCheck, CheckCircle2, XCircle, RefreshCw, Info, AlertTriangle, SwitchCamera, Navigation, Image as ImageIcon, X, QrCode, Settings } from 'lucide-react';
+import { Camera, MapPin, Clock, History as HistoryIcon, ShieldCheck, UserCheck, CheckCircle2, XCircle, RefreshCw, Info, AlertTriangle, Navigation, Image as ImageIcon, X, QrCode, Settings, ScanFace, Loader2, UserPlus } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'motion/react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import Link from 'next/link';
+import { getFaceDescriptor, faceDistance, MATCH_THRESHOLD, matchConfidence } from '@/lib/face';
+import { FaceEnrollment, resolveEnrollment } from '@/lib/faceStore';
 
 const MapComponent = dynamic(() => import('../components/Map'), { ssr: false });
+const FaceEnroll = dynamic(() => import('../components/FaceEnroll'), { ssr: false });
 
 // Default Office Coordinates (Central Phnom Penh)
 const DEFAULT_OFFICE_COORDS = { lat: 11.5564, lng: 104.9282 }; 
@@ -54,6 +57,17 @@ export default function App() {
   const [isClient, setIsClient] = useState(false);
   const [tgUser, setTgUser] = useState<{name: string, id: string | null}>({name: 'ភ្ញៀវអនាមិក (Guest)', id: null});
 
+  // Face enrollment & verification
+  const [enrollment, setEnrollment] = useState<FaceEnrollment | null>(null);
+  const [showEnroll, setShowEnroll] = useState(false);
+  const [faceStatus, setFaceStatus] = useState<'idle' | 'verifying' | 'matched' | 'failed'>('idle');
+  const [faceConfidence, setFaceConfidence] = useState<number | null>(null);
+
+  // QR secrets (admin-generated, validated server-side config)
+  const [validQrSecrets, setValidQrSecrets] = useState<string[]>(['SECURE_ATTEND_OFFICE_QR_2026']);
+
+  const currentUserId = tgUser.id ? tgUser.id.toString() : 'guest';
+
   // Real-time clock update & History Load
   useEffect(() => {
     setIsClient(true);
@@ -89,8 +103,26 @@ export default function App() {
       console.error("Failed to load local storage data:", e);
     }
     
+    // Load valid QR secrets (admin-generated)
+    fetch('/api/qr-config')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data.validSecrets) && data.validSecrets.length) {
+          setValidQrSecrets(data.validSecrets);
+        }
+      })
+      .catch(() => {});
+
     return () => clearInterval(timer);
   }, []);
+
+  // Load the user's face enrollment (cloud-first, falls back to local)
+  useEffect(() => {
+    if (!isClient) return;
+    resolveEnrollment(currentUserId)
+      .then((rec) => setEnrollment(rec))
+      .catch(() => {});
+  }, [isClient, currentUserId]);
 
   // Strict Geolocation fetching
   const checkLocation = useCallback(() => {
@@ -135,8 +167,15 @@ export default function App() {
   }, []);
 
   const openCameraFlow = async (type: 'IN' | 'OUT') => {
+    // Require a registered face before allowing selfie check-in.
+    if (!enrollment) {
+      setShowEnroll(true);
+      return;
+    }
     setActionType(type);
     setPhoto(null);
+    setFaceStatus('idle');
+    setFaceConfidence(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { facingMode: 'user' }, // Strictly front camera
@@ -164,23 +203,50 @@ export default function App() {
     setCameraActive(false);
   };
 
-  const capturePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
-       const video = videoRef.current;
-       const canvas = canvasRef.current;
-       // Match source dimensions for high quality
-       canvas.width = video.videoWidth || 640;
-       canvas.height = video.videoHeight || 480;
-       const ctx = canvas.getContext('2d');
-       if (ctx) {
-         // Mirror the canvas so it acts like a real selfie mirror
-         ctx.translate(canvas.width, 0);
-         ctx.scale(-1, 1);
-         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-         const photoData = canvas.toDataURL('image/jpeg', 0.85);
-         setPhoto(photoData);
-         stopCamera();
-       }
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    // Match source dimensions for high quality
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Unmirrored snapshot for the AI (same orientation as enrollment).
+    const aiCanvas = document.createElement('canvas');
+    aiCanvas.width = canvas.width;
+    aiCanvas.height = canvas.height;
+    aiCanvas.getContext('2d')?.drawImage(video, 0, 0, aiCanvas.width, aiCanvas.height);
+
+    // Mirror the visible canvas so it acts like a real selfie mirror.
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const photoData = canvas.toDataURL('image/jpeg', 0.85);
+    setPhoto(photoData);
+
+    // --- AI face verification against the enrolled descriptor ---
+    setFaceStatus('verifying');
+    setFaceConfidence(null);
+    try {
+      const desc = await getFaceDescriptor(aiCanvas);
+      stopCamera();
+      if (!desc) {
+        setFaceStatus('failed');
+        setFaceConfidence(null);
+        return;
+      }
+      if (enrollment) {
+        const dist = faceDistance(desc, enrollment.descriptor);
+        setFaceConfidence(matchConfidence(dist));
+        setFaceStatus(dist < MATCH_THRESHOLD ? 'matched' : 'failed');
+      } else {
+        setFaceStatus('failed');
+      }
+    } catch {
+      stopCamera();
+      setFaceStatus('failed');
     }
   };
 
@@ -245,7 +311,7 @@ export default function App() {
      const text = results[0]?.rawValue || results[0]?.text || results?.text || results;
      if (typeof text !== 'string') return;
 
-     if (text === 'SECURE_ATTEND_OFFICE_QR_2026') {
+     if (validQrSecrets.includes(text)) {
          submitAttendance('qr', text);
      } else {
          alert('QR Code មិនត្រឹមត្រូវទេ! (តម្រូវឲ្យស្កេន QR ការិយាល័យ)');
@@ -254,16 +320,23 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-slate-50 font-sans text-slate-900 pb-16 safe-area-bottom">
+    <div className="flex flex-col h-[100dvh] bg-ambient font-sans text-slate-900 pb-16 safe-area-bottom">
       {/* Top App Header */}
-      <header className="bg-indigo-600 text-white p-4 shadow-md z-10 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-6 h-6 text-indigo-200" />
-          <h1 className="text-lg font-bold">SecureAttend</h1>
+      <header className="brand-gradient text-white px-4 py-3.5 shadow-glow-brand z-10 flex items-center justify-between relative overflow-hidden">
+        {/* decorative glow */}
+        <div className="absolute -top-10 -right-6 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="flex items-center gap-2.5 relative">
+          <div className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center ring-1 ring-white/25">
+            <ShieldCheck className="w-5 h-5 text-white" />
+          </div>
+          <div className="leading-tight">
+            <h1 className="text-base font-bold tracking-tight">SecureAttend</h1>
+            <p className="text-[10px] font-medium text-white/70 -mt-0.5">ប្រព័ន្ធកត់ត្រាវត្តមាន</p>
+          </div>
         </div>
-        <div className="text-sm font-medium opacity-90 flex items-center gap-2">
-          <UserCheck className="w-4 h-4 opacity-70" />
-          {tgUser.name}
+        <div className="flex items-center gap-2 bg-white/15 backdrop-blur rounded-full pl-2.5 pr-3 py-1.5 ring-1 ring-white/20 relative max-w-[45%]">
+          <UserCheck className="w-4 h-4 text-white/80 shrink-0" />
+          <span className="text-xs font-semibold truncate">{tgUser.name}</span>
         </div>
       </header>
 
@@ -273,22 +346,72 @@ export default function App() {
         {activeTab === 'attend' && (
           <div className="p-4 flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200">
             {/* Clock Widget */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col items-center justify-center relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-              <Clock className="w-8 h-8 text-indigo-500 mb-2" />
-              <div className="text-4xl font-extrabold text-slate-800 tracking-tight font-mono">
+            <div className="relative rounded-3xl p-6 flex flex-col items-center justify-center overflow-hidden bg-slate-900 text-white shadow-card">
+              {/* ambient glows */}
+              <div className="absolute -top-8 -right-8 w-40 h-40 bg-brand-500/30 rounded-full blur-3xl" />
+              <div className="absolute -bottom-10 -left-8 w-40 h-40 bg-violet-500/20 rounded-full blur-3xl" />
+              <div className="flex items-center gap-1.5 text-brand-300 mb-2 relative">
+                <Clock className="w-4 h-4" />
+                <span className="text-[11px] font-semibold uppercase tracking-widest">ម៉ោងបច្ចុប្បន្ន</span>
+              </div>
+              <div className="text-5xl font-bold tracking-tight font-mono tabular-nums relative bg-gradient-to-b from-white to-slate-300 bg-clip-text text-transparent">
                 {isClient ? currentTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '--:--:--'}
               </div>
-              <div className="text-slate-500 mt-1 text-sm font-medium">
+              <div className="text-slate-400 mt-2 text-sm font-medium relative">
                 {isClient ? currentTime.toLocaleDateString('km-KH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'កំពុងផ្ទុក...'}
               </div>
             </div>
 
+            {/* Face Enrollment Status */}
+            {enrollment ? (
+              <button
+                onClick={() => setShowEnroll(true)}
+                className="w-full bg-white rounded-3xl shadow-card border border-slate-100 p-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition"
+              >
+                <div className="relative shrink-0">
+                  <div className="w-12 h-12 rounded-2xl overflow-hidden ring-2 ring-emerald-400/60">
+                    {enrollment.photo ? (
+                      <img src={enrollment.photo} alt="មុខ" className="object-cover w-full h-full" />
+                    ) : (
+                      <div className="w-full h-full bg-emerald-50 flex items-center justify-center"><ScanFace className="w-6 h-6 text-emerald-500" /></div>
+                    )}
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center ring-2 ring-white">
+                    <CheckCircle2 className="w-3 h-3 text-white" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                    <ScanFace className="w-4 h-4 text-emerald-500" /> ចុះឈ្មោះមុខរួចរាល់
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
+                    បានផ្ទៀងផ្ទាត់សម្គាល់មុខ · {enrollment.syncedToCloud ? 'Cloud ☁️' : 'លើ device'}
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-brand-600 shrink-0">ប្ដូរ</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowEnroll(true)}
+                className="w-full relative overflow-hidden brand-gradient text-white rounded-3xl shadow-glow-brand p-4 flex items-center gap-3 text-left active:scale-[0.99] transition"
+              >
+                <div className="absolute -top-8 -right-6 w-28 h-28 bg-white/10 rounded-full blur-2xl" />
+                <div className="w-12 h-12 rounded-2xl bg-white/15 ring-1 ring-white/25 flex items-center justify-center shrink-0 relative">
+                  <ScanFace className="w-6 h-6" />
+                </div>
+                <div className="flex-1 relative">
+                  <p className="text-sm font-bold flex items-center gap-1.5">ចុះឈ្មោះមុខ <UserPlus className="w-4 h-4" /></p>
+                  <p className="text-xs text-white/80 mt-0.5 leading-tight">ចុះឈ្មោះមុខម្ដង ដើម្បីផ្ទៀងផ្ទាត់ពេលចូល/ចេញ</p>
+                </div>
+                <span className="text-xs font-bold bg-white/20 rounded-full px-3 py-1.5 shrink-0 relative">ចាប់ផ្ដើម</span>
+              </button>
+            )}
+
             {/* Geofence Card */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+            <div className="bg-white rounded-3xl shadow-card border border-slate-100 p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-blue-500" /> ទីតាំងរបស់អ្នក
+                  <MapPin className="w-4 h-4 text-brand-500" /> ទីតាំងរបស់អ្នក
                 </h2>
                 <button 
                   onClick={checkLocation}
@@ -333,32 +456,32 @@ export default function App() {
             </div>
 
             {/* Verification Method Toggle */}
-            <div className="flex bg-slate-100 p-1 rounded-xl mt-2">
-               <button onClick={() => setVerifyMethod('camera')} className={`flex-1 py-2.5 flex justify-center items-center gap-2 text-sm font-bold rounded-lg transition-colors ${verifyMethod === 'camera' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>
+            <div className="flex bg-white border border-slate-100 shadow-card p-1 rounded-2xl mt-2">
+               <button onClick={() => setVerifyMethod('camera')} className={`flex-1 py-2.5 flex justify-center items-center gap-2 text-sm font-bold rounded-xl transition-all ${verifyMethod === 'camera' ? 'brand-gradient text-white shadow-glow-brand' : 'text-slate-500'}`}>
                   <Camera className="w-4 h-4" /> ថតមុខ (Selfie)
                </button>
-               <button onClick={() => setVerifyMethod('qr')} className={`flex-1 py-2.5 flex justify-center items-center gap-2 text-sm font-bold rounded-lg transition-colors ${verifyMethod === 'qr' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}>
+               <button onClick={() => setVerifyMethod('qr')} className={`flex-1 py-2.5 flex justify-center items-center gap-2 text-sm font-bold rounded-xl transition-all ${verifyMethod === 'qr' ? 'brand-gradient text-white shadow-glow-brand' : 'text-slate-500'}`}>
                   <QrCode className="w-4 h-4" /> ស្កេន QR
                </button>
             </div>
 
             {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-4 mt-2">
-              <button 
+              <button
                 disabled={!isWithinRadius}
                 onClick={() => verifyMethod === 'camera' ? openCameraFlow('IN') : setQrActionType('IN')}
-                className="bg-emerald-600 text-white disabled:bg-slate-300 disabled:text-slate-500 py-4 rounded-2xl font-bold shadow-sm shadow-emerald-600/20 active:scale-95 transition-all flex flex-col items-center justify-center gap-2"
+                className="group bg-gradient-to-br from-emerald-500 to-emerald-600 text-white disabled:from-slate-200 disabled:to-slate-300 disabled:text-slate-400 disabled:shadow-none py-5 rounded-2xl font-bold shadow-glow-emerald active:scale-95 transition-all flex flex-col items-center justify-center gap-2"
               >
-                <div className="bg-white/20 p-2 rounded-full"><UserCheck className="w-6 h-6" /></div>
+                <div className="bg-white/20 p-2.5 rounded-full group-active:scale-90 transition-transform"><UserCheck className="w-6 h-6" /></div>
                 ចូលធ្វើការ (IN)
               </button>
 
-              <button 
+              <button
                 disabled={!isWithinRadius}
                 onClick={() => verifyMethod === 'camera' ? openCameraFlow('OUT') : setQrActionType('OUT')}
-                className="bg-amber-500 text-white disabled:bg-slate-300 disabled:text-slate-500 py-4 rounded-2xl font-bold shadow-sm shadow-amber-500/20 active:scale-95 transition-all flex flex-col items-center justify-center gap-2"
+                className="group bg-gradient-to-br from-amber-400 to-orange-500 text-white disabled:from-slate-200 disabled:to-slate-300 disabled:text-slate-400 disabled:shadow-none py-5 rounded-2xl font-bold shadow-[0_10px_30px_-8px_rgba(245,158,11,0.5)] active:scale-95 transition-all flex flex-col items-center justify-center gap-2"
               >
-                <div className="bg-black/10 p-2 rounded-full"><Clock className="w-6 h-6" /></div>
+                <div className="bg-black/10 p-2.5 rounded-full group-active:scale-90 transition-transform"><Clock className="w-6 h-6" /></div>
                 ចេញធ្វើការ (OUT)
               </button>
             </div>
@@ -424,7 +547,7 @@ export default function App() {
           <div className="p-4 space-y-4 pb-10 animate-in fade-in duration-200">
             <h2 className="text-xl font-bold text-slate-800 mb-2 px-2">ស្ថាបត្យកម្មប្រព័ន្ធ (Architecture)</h2>
             
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+            <div className="bg-white rounded-3xl shadow-card border border-slate-100 p-5 space-y-3">
               <h3 className="font-bold text-indigo-700 flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5" /> ការពារការបន្លំម៉ោង (Anti-Cheat Time)
               </h3>
@@ -433,7 +556,7 @@ export default function App() {
               </p>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+            <div className="bg-white rounded-3xl shadow-card border border-slate-100 p-5 space-y-3">
               <h3 className="font-bold text-amber-600 flex items-center gap-2">
                 <MapPin className="w-5 h-5" /> ការពារទីតាំងក្លែងក្លាយ (Anti-Fake GPS)
               </h3>
@@ -442,7 +565,7 @@ export default function App() {
               </p>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-3">
+            <div className="bg-white rounded-3xl shadow-card border border-slate-100 p-5 space-y-3">
               <h3 className="font-bold text-emerald-600 flex items-center gap-2">
                 <Camera className="w-5 h-5" /> កាមេរ៉ាផ្ទាល់ (Live Self-Verification)
               </h3>
@@ -452,11 +575,14 @@ export default function App() {
             </div>
 
             {/* Admin Link */}
-            <div className="bg-slate-900 rounded-2xl shadow-sm border border-slate-800 p-5 mt-6 text-white text-center">
-              <ShieldCheck className="w-8 h-8 mx-auto text-indigo-400 mb-2" />
-              <h3 className="font-bold">សម្រាប់អ្នកគ្រប់គ្រង (Admin)</h3>
-              <p className="text-sm text-slate-400 font-medium mt-1 mb-4">ចូលទៅកាន់ផ្ទាំងគ្រប់គ្រងប្រព័ន្ធ ដើម្បីកំណត់ទីតាំង និង Telegram។</p>
-              <Link href="/admin" className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl shadow-sm transition w-full">
+            <div className="relative bg-slate-900 rounded-3xl shadow-card border border-slate-800 p-6 mt-6 text-white text-center overflow-hidden">
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-brand-500/30 rounded-full blur-3xl" />
+              <div className="w-12 h-12 mx-auto rounded-2xl bg-white/10 ring-1 ring-white/15 flex items-center justify-center mb-3 relative">
+                <ShieldCheck className="w-6 h-6 text-brand-300" />
+              </div>
+              <h3 className="font-bold relative">សម្រាប់អ្នកគ្រប់គ្រង (Admin)</h3>
+              <p className="text-sm text-slate-400 font-medium mt-1 mb-4 relative">ចូលទៅកាន់ផ្ទាំងគ្រប់គ្រងប្រព័ន្ធ ដើម្បីកំណត់ទីតាំង និង Telegram។</p>
+              <Link href="/admin" className="relative inline-flex items-center justify-center gap-2 px-6 py-3 brand-gradient hover:opacity-90 text-white font-semibold rounded-xl shadow-glow-brand transition w-full">
                  <Settings className="w-5 h-5" /> ចូលផ្ទាំងអ្នកគ្រប់គ្រង
               </Link>
             </div>
@@ -500,26 +626,46 @@ export default function App() {
            {/* Camera Bottom Constraints */}
            <div className="bg-black text-white p-8 pb-12 flex flex-col items-center justify-center gap-6">
               {!photo ? (
-                <button 
+                <button
                   onClick={capturePhoto}
                   className="w-20 h-20 bg-white rounded-full flex items-center justify-center ring-4 ring-white/30 active:scale-95 transition-transform"
                 >
                   <div className="w-16 h-16 bg-white border-2 border-black rounded-full"></div>
                 </button>
               ) : (
-                <div className="w-full max-w-sm flex gap-4">
-                  <button 
-                    onClick={retakePhoto}
-                    className="flex-1 py-4 bg-slate-800 rounded-2xl font-bold flex items-center justify-center gap-2"
-                  >
-                    ថតផ្ដើមម្ដងទៀត
-                  </button>
-                  <button 
-                    onClick={() => submitAttendance('camera')}
-                    className="flex-1 py-4 bg-emerald-600 rounded-2xl font-bold text-white shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
-                  >
-                    យល់ព្រម <CheckCircle2 className="w-5 h-5" />
-                  </button>
+                <div className="w-full max-w-sm flex flex-col gap-4">
+                  {/* AI verification status banner */}
+                  {faceStatus === 'verifying' && (
+                    <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white/10 text-brand-200 font-semibold text-sm">
+                      <Loader2 className="w-5 h-5 animate-spin" /> កំពុងផ្ទៀងផ្ទាត់មុខ (AI)...
+                    </div>
+                  )}
+                  {faceStatus === 'matched' && (
+                    <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-emerald-500/20 text-emerald-300 font-semibold text-sm border border-emerald-400/30">
+                      <ScanFace className="w-5 h-5" /> មុខត្រូវគ្នា{faceConfidence !== null ? ` · ${faceConfidence}%` : ''} ✓
+                    </div>
+                  )}
+                  {faceStatus === 'failed' && (
+                    <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-red-500/20 text-red-300 font-semibold text-sm border border-red-400/30 text-center">
+                      <AlertTriangle className="w-5 h-5 shrink-0" /> មុខមិនត្រូវគ្នា{faceConfidence !== null ? ` (${faceConfidence}%)` : ''} — សូមថតម្ដងទៀត
+                    </div>
+                  )}
+
+                  <div className="flex gap-4">
+                    <button
+                      onClick={retakePhoto}
+                      className="flex-1 py-4 bg-slate-800 rounded-2xl font-bold flex items-center justify-center gap-2"
+                    >
+                      ថតម្ដងទៀត
+                    </button>
+                    <button
+                      onClick={() => submitAttendance('camera')}
+                      disabled={faceStatus !== 'matched'}
+                      className="flex-1 py-4 bg-emerald-600 disabled:bg-slate-700 disabled:text-slate-400 rounded-2xl font-bold text-white shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
+                    >
+                      យល់ព្រម <CheckCircle2 className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               )}
            </div>
@@ -550,37 +696,40 @@ export default function App() {
       )}
 
       {/* Bottom Tab Navigation */}
-      <nav className="border-t border-slate-200 bg-white px-6 py-3 flex justify-between items-center fixed bottom-0 w-full z-40 pb-safe">
-        <button 
-          onClick={() => setActiveTab('attend')} 
-          className={`flex flex-col items-center gap-1 w-1/3 transition-colors ${activeTab === 'attend' ? 'text-indigo-600' : 'text-slate-400'}`}
-        >
-          <div className={`${activeTab === 'attend' ? 'bg-indigo-100' : 'bg-transparent'} p-1.5 rounded-full transition-colors`}>
-            <MapPin className="w-6 h-6" />
-          </div>
-          <span className="text-[10px] font-bold">បញ្ជិកា</span>
-        </button>
-        
-        <button 
-          onClick={() => setActiveTab('history')} 
-          className={`flex flex-col items-center gap-1 w-1/3 transition-colors ${activeTab === 'history' ? 'text-indigo-600' : 'text-slate-400'}`}
-        >
-          <div className={`${activeTab === 'history' ? 'bg-indigo-100' : 'bg-transparent'} p-1.5 rounded-full transition-colors`}>
-            <HistoryIcon className="w-6 h-6" />
-          </div>
-          <span className="text-[10px] font-bold">ប្រវត្តិ</span>
-        </button>
-        
-        <button 
-          onClick={() => setActiveTab('info')} 
-          className={`flex flex-col items-center gap-1 w-1/3 transition-colors ${activeTab === 'info' ? 'text-indigo-600' : 'text-slate-400'}`}
-        >
-          <div className={`${activeTab === 'info' ? 'bg-indigo-100' : 'bg-transparent'} p-1.5 rounded-full transition-colors`}>
-            <Info className="w-6 h-6" />
-          </div>
-          <span className="text-[10px] font-bold">ព័ត៌មាន</span>
-        </button>
+      <nav className="border-t border-slate-200/70 glass px-6 py-2.5 flex justify-between items-center fixed bottom-0 w-full z-40 pb-safe">
+        {([
+          { id: 'attend', icon: MapPin, label: 'បញ្ជិកា' },
+          { id: 'history', icon: HistoryIcon, label: 'ប្រវត្តិ' },
+          { id: 'info', icon: Info, label: 'ព័ត៌មាន' },
+        ] as const).map(({ id, icon: Icon, label }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={`flex flex-col items-center gap-1 w-1/3 transition-colors ${activeTab === id ? 'text-brand-600' : 'text-slate-400'}`}
+          >
+            <div className={`${activeTab === id ? 'brand-gradient text-white shadow-glow-brand' : 'bg-transparent'} px-4 py-1.5 rounded-full transition-all`}>
+              <Icon className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] font-bold">{label}</span>
+          </button>
+        ))}
       </nav>
+
+      {/* FACE ENROLLMENT MODAL */}
+      {showEnroll && (
+        <FaceEnroll
+          userId={currentUserId}
+          userName={tgUser.name}
+          onClose={() => setShowEnroll(false)}
+          onEnrolled={(rec) => {
+            setEnrollment(rec);
+            setShowEnroll(false);
+            setSuccessMessage('ចុះឈ្មោះមុខបានជោគជ័យ! ឥឡូវអ្នកអាចចូល/ចេញធ្វើការបាន។');
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 2500);
+          }}
+        />
+      )}
 
       {/* SUCCESS ANIMATION OVERLAY */}
       <AnimatePresence>

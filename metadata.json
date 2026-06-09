@@ -1,6 +1,6 @@
 {
-  "name": "Telegraf Serverless Bot",
-  "description": "A Telegram bot integration built with Telegraf deployed as a serverless function.",
+  "name": "SecureAttend",
+  "description": "ប្រព័ន្ធកត់ត្រាវត្តមានបុគ្គលិកឌីជីថល៖ ផ្ទៀងផ្ទាត់ទីតាំង GPS, ថតមុខ Selfie, ស្កេន QR និងជូនដំណឹងតាម Telegram។",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

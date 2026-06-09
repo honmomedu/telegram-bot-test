@@ -16,3 +16,22 @@ CREATE TABLE broadcast_history (
   success_count INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- បង្កើតតារាងសម្រាប់រក្សាទុកទិន្នន័យចុះឈ្មោះមុខ (Face Enrollments)
+-- descriptor = 128-dimension face embedding ដែលគណនាដោយ face-api.js
+CREATE TABLE face_enrollments (
+  user_id TEXT PRIMARY KEY,
+  name TEXT,
+  descriptor JSONB NOT NULL,
+  photo TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- បង្កើតតារាងសម្រាប់ QR Code ការិយាល័យ ដែល Admin បង្កើត (Office QR Codes)
+CREATE TABLE qr_codes (
+  id TEXT PRIMARY KEY,            -- ឧ. 'office'
+  secret TEXT NOT NULL,
+  label TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);

@@ -1,8 +1,10 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Users, AlertCircle, CheckCircle2, Home, BarChart3, Settings, Bell, Search, UserPlus, LogOut, Download } from 'lucide-react';
+import { Users, AlertCircle, CheckCircle2, ShieldCheck, Settings, Bell, Search, UserPlus, LogOut, Download, QrCode } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
+import dynamic from 'next/dynamic';
+
+const QrGenerator = dynamic(() => import('../../components/QrGenerator'), { ssr: false });
 
 interface Employee {
   id: string;
@@ -19,7 +21,7 @@ const mockEmployees: Employee[] = [
 ];
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'employees' | 'settings' | 'system'>('employees');
+  const [activeTab, setActiveTab] = useState<'employees' | 'qrcode' | 'settings' | 'system'>('employees');
   
   // Settings Tab
   const [telegramToken, setTelegramToken] = useState('');
@@ -106,7 +108,7 @@ export default function AdminDashboard() {
 
   if (isAdmin === null || isAdmin === false) {
       return (
-         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans">
+         <div className="min-h-screen flex items-center justify-center bg-ambient p-4 font-sans">
              <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 max-w-md text-center">
                  {isAdmin === null ? (
                      <div className="animate-pulse text-indigo-600 font-medium">កំពុងផ្ទៀងផ្ទាត់សិទ្ធិ...</div>
@@ -124,15 +126,18 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans selection:bg-indigo-100 selection:text-indigo-900">
+    <div className="min-h-screen bg-ambient flex flex-col md:flex-row font-sans selection:bg-indigo-100 selection:text-indigo-900">
       
       {/* Sidebar Navigation */}
       <aside className="w-full md:w-64 bg-slate-900 text-slate-300 flex flex-col hidden md:flex h-screen sticky top-0">
         <div className="p-6 border-b border-slate-800 flex justify-between items-center">
-            <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                <div className="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center text-white"><BarChart3 size={18} /></div>
-                Admin HQ
-            </h1>
+            <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl brand-gradient flex items-center justify-center text-white shadow-glow-brand"><ShieldCheck size={18} /></div>
+                <div className="leading-tight">
+                    <h1 className="text-base font-bold tracking-tight text-white">SecureAttend</h1>
+                    <p className="text-[10px] font-medium text-slate-400 -mt-0.5">ផ្ទាំងគ្រប់គ្រង</p>
+                </div>
+            </div>
         </div>
         <div className="p-4 flex-1 space-y-1">
             <button 
@@ -141,7 +146,13 @@ export default function AdminDashboard() {
             >
                 <Users size={18} /> គ្រប់គ្រងបុគ្គលិក (Employees)
             </button>
-            <button 
+            <button
+                onClick={() => setActiveTab('qrcode')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'qrcode' ? 'bg-indigo-600/10 text-indigo-400' : 'hover:bg-slate-800 hover:text-white'}`}
+            >
+                <QrCode size={18} /> QR Code ការិយាល័យ
+            </button>
+            <button
                 onClick={() => setActiveTab('settings')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'settings' ? 'bg-indigo-600/10 text-indigo-400' : 'hover:bg-slate-800 hover:text-white'}`}
             >
@@ -162,14 +173,15 @@ export default function AdminDashboard() {
       </aside>
 
       {/* Mobile Topbar */}
-      <div className="md:hidden bg-slate-900 text-white p-4 flex justify-between items-center sticky top-0 z-50">
+      <div className="md:hidden brand-gradient text-white p-4 flex justify-between items-center sticky top-0 z-50 shadow-glow-brand">
           <div className="font-bold flex items-center gap-2">
-             <div className="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center"><BarChart3 size={16} /></div> Admin HQ
+             <div className="w-8 h-8 rounded-lg bg-white/15 ring-1 ring-white/25 flex items-center justify-center"><ShieldCheck size={16} /></div> SecureAttend
           </div>
           <div className="flex gap-2">
-             <button onClick={() => setActiveTab('employees')} className={`p-2 rounded ${activeTab === 'employees' ? 'bg-slate-800 hover:bg-slate-800 text-indigo-400' : 'hover:bg-slate-800'}`}><Users size={20}/></button>
-             <button onClick={() => setActiveTab('settings')} className={`p-2 rounded ${activeTab === 'settings' ? 'bg-slate-800 hover:bg-slate-800 text-indigo-400' : 'hover:bg-slate-800'}`}><Bell size={20}/></button>
-             <button onClick={() => setActiveTab('system')} className={`p-2 rounded ${activeTab === 'system' ? 'bg-slate-800 hover:bg-slate-800 text-indigo-400' : 'hover:bg-slate-800'}`}><Settings size={20}/></button>
+             <button onClick={() => setActiveTab('employees')} className={`p-2 rounded ${activeTab === 'employees' ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}><Users size={20}/></button>
+             <button onClick={() => setActiveTab('qrcode')} className={`p-2 rounded ${activeTab === 'qrcode' ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}><QrCode size={20}/></button>
+             <button onClick={() => setActiveTab('settings')} className={`p-2 rounded ${activeTab === 'settings' ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}><Bell size={20}/></button>
+             <button onClick={() => setActiveTab('system')} className={`p-2 rounded ${activeTab === 'system' ? 'bg-white/20 text-white' : 'hover:bg-white/10'}`}><Settings size={20}/></button>
           </div>
       </div>
 
@@ -187,13 +199,13 @@ export default function AdminDashboard() {
                        <button className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition shadow-sm">
                            <Download size={16} /> Export CSV
                        </button>
-                       <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition shadow-sm shadow-indigo-600/20">
+                       <button className="flex items-center gap-2 px-4 py-2 brand-gradient hover:opacity-90 text-white rounded-xl text-sm font-semibold transition shadow-glow-brand">
                            <UserPlus size={16} /> បន្ថែមបុគ្គលិកថ្មី
                        </button>
                    </div>
                 </header>
 
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="bg-white rounded-2xl shadow-card border border-slate-100 overflow-hidden">
                     <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
                         <div className="relative w-full max-w-sm">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
@@ -241,6 +253,8 @@ export default function AdminDashboard() {
             </div>
         )}
 
+        {activeTab === 'qrcode' && <QrGenerator />}
+
         {activeTab === 'settings' && (
             <div className="space-y-6 max-w-2xl animate-in fade-in duration-300">
                 <header>
@@ -248,7 +262,7 @@ export default function AdminDashboard() {
                    <p className="text-slate-500 mt-1">ភ្ជាប់ប្រព័ន្ធ Admin ជាមួយនឹង Telegram ដើម្បីទទួលសារជូនដំណឹងពេលមានអ្នក Check-In/Out</p>
                 </header>
 
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
+                <div className="bg-white rounded-2xl shadow-card border border-slate-100 p-6 space-y-6">
                    <div className="flex items-start gap-4 p-4 bg-indigo-50 text-indigo-900 rounded-lg border border-indigo-100">
                        <Bell className="w-6 h-6 shrink-0 mt-0.5" />
                        <div className="text-sm">
@@ -298,7 +312,7 @@ export default function AdminDashboard() {
                            <button 
                                type="submit"
                                disabled={saveStatus === 'saving'}
-                               className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg shadow-sm transition flex items-center gap-2"
+                               className="px-6 py-2.5 brand-gradient hover:opacity-90 disabled:opacity-50 text-white font-semibold rounded-xl shadow-glow-brand transition flex items-center gap-2"
                            >
                                {saveStatus === 'saving' ? (
                                    <>កំពុងរក្សាទុក...</>
@@ -319,7 +333,7 @@ export default function AdminDashboard() {
                    <p className="text-slate-500 mt-1">កំណត់ទីតាំងការិយាល័យ (Office Location) និងរយៈចម្ងាយអនុញ្ញាត (Radius)</p>
                 </header>
 
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
+                <div className="bg-white rounded-2xl shadow-card border border-slate-100 p-6 space-y-6">
                    <div className="flex items-start gap-4 p-4 bg-amber-50 text-amber-900 rounded-lg border border-amber-100">
                        <AlertCircle className="w-6 h-6 shrink-0 mt-0.5" />
                        <div className="text-sm border-amber-200">
@@ -407,7 +421,7 @@ export default function AdminDashboard() {
                            <button 
                                type="submit"
                                disabled={sysSaveStatus === 'saving'}
-                               className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg shadow-sm transition flex items-center gap-2"
+                               className="px-6 py-2.5 brand-gradient hover:opacity-90 disabled:opacity-50 text-white font-semibold rounded-xl shadow-glow-brand transition flex items-center gap-2"
                            >
                                {sysSaveStatus === 'saving' ? (
                                    <>កំពុងរក្សាទុក...</>

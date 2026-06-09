@@ -1,1 +1,120 @@
 @import "tailwindcss";
+
+/* ============================================================
+   SecureAttend — Design System
+   ============================================================ */
+
+@theme {
+  --font-sans: var(--font-kantumruy), ui-sans-serif, system-ui, sans-serif;
+
+  /* Brand palette (indigo → violet) */
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+}
+
+:root {
+  --brand-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #6366f1 100%);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Khmer text breathes better with a touch more line-height */
+:lang(km),
+[lang="km"] {
+  line-height: 1.7;
+}
+
+/* ---- Reusable brand utilities ---- */
+.brand-gradient {
+  background-image: var(--brand-gradient);
+}
+
+.brand-text-gradient {
+  background-image: linear-gradient(135deg, #4f46e5, #8b5cf6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Soft, layered elevation used across cards */
+.shadow-card {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 24px -8px rgba(79, 70, 229, 0.12);
+}
+
+.shadow-glow-brand {
+  box-shadow: 0 10px 30px -8px rgba(79, 70, 229, 0.45);
+}
+
+.shadow-glow-emerald {
+  box-shadow: 0 10px 30px -8px rgba(16, 185, 129, 0.45);
+}
+
+/* Subtle ambient grid/gradient background for marketing & app surfaces */
+.bg-ambient {
+  background-color: #f8fafc;
+  background-image:
+    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.06) 0px, transparent 45%);
+}
+
+/* ---- Animations ---- */
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.animate-float-slow {
+  animation: float-slow 6s ease-in-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.7; }
+  70% { transform: scale(1.3); opacity: 0; }
+  100% { transform: scale(1.3); opacity: 0; }
+}
+.animate-pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
+/* ---- Custom scrollbar (desktop) ---- */
+@media (pointer: fine) {
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.25);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.45); }
+}
+
+/* Safe-area helpers for Telegram Mini App / iOS notch */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
