@@ -47,7 +47,11 @@ export interface DaySummary {
   hours: number;
   late: boolean;
   lateMinutes: number;
+  manual: boolean; // hours entered manually (overrides auto)
+  note?: string;
 }
+
+export interface ManualHour { hours: number; note?: string }
 
 export interface AttendanceReport {
   code: string;
@@ -78,11 +82,16 @@ function hmToMinutes(hm: string): number {
   return (h || 0) * 60 + (m || 0);
 }
 
-/** Build a per-day attendance report for ONE employee's records. */
+/**
+ * Build a per-day attendance report for ONE employee.
+ * Manual timesheet hours (if provided for a date) override the auto-computed
+ * IN→OUT hours for that day — used for part-timers / corrections.
+ */
 export function buildReport(
   code: string,
   records: AttRecord[],
   settings: PayrollSettings,
+  manual?: Map<string, ManualHour>,
 ): AttendanceReport {
   const startMin = hmToMinutes(settings.work_start_time) + (settings.late_threshold_min || 0);
 
@@ -95,35 +104,54 @@ export function buildReport(
     else slot.outs.push(p.minutes);
   }
 
+  // Union of dates that have attendance OR a manual entry.
+  const allDates = new Set<string>([...byDay.keys(), ...(manual ? manual.keys() : [])]);
+
   const days: DaySummary[] = [];
   let lateCount = 0;
   let totalHours = 0;
+  let daysPresent = 0;
 
-  for (const [date, slot] of [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    const firstInMin = slot.ins.length ? Math.min(...slot.ins) : null;
-    const lastOutMin = slot.outs.length ? Math.max(...slot.outs) : null;
-    const firstInHM = firstInMin != null
-      ? slot.inHM[slot.ins.indexOf(firstInMin)]
-      : null;
+  for (const date of [...allDates].sort((a, b) => a.localeCompare(b))) {
+    const slot = byDay.get(date);
+    const firstInMin = slot && slot.ins.length ? Math.min(...slot.ins) : null;
+    const lastOutMin = slot && slot.outs.length ? Math.max(...slot.outs) : null;
+    const firstInHM = firstInMin != null ? slot!.inHM[slot!.ins.indexOf(firstInMin)] : null;
     const lastOutHM = lastOutMin != null
       ? `${String(Math.floor(lastOutMin / 60)).padStart(2, '0')}:${String(lastOutMin % 60).padStart(2, '0')}`
       : null;
 
-    const hours = firstInMin != null && lastOutMin != null
+    const autoHours = firstInMin != null && lastOutMin != null
       ? Math.max(0, (lastOutMin - firstInMin) / 60)
       : 0;
+
+    const man = manual?.get(date);
+    const isManual = man != null;
+    const hours = isManual ? Number(man!.hours || 0) : autoHours;
     totalHours += hours;
 
     const late = firstInMin != null && firstInMin > startMin;
     const lateMinutes = late ? firstInMin! - hmToMinutes(settings.work_start_time) : 0;
     if (late) lateCount++;
 
-    days.push({ date, firstIn: firstInHM, lastOut: lastOutHM, hours: Math.round(hours * 100) / 100, late, lateMinutes });
+    const present = (firstInMin != null) || hours > 0;
+    if (present) daysPresent++;
+
+    days.push({
+      date,
+      firstIn: firstInHM,
+      lastOut: lastOutHM,
+      hours: Math.round(hours * 100) / 100,
+      late,
+      lateMinutes,
+      manual: isManual,
+      note: man?.note,
+    });
   }
 
   return {
     code,
-    daysPresent: days.length,
+    daysPresent,
     lateCount,
     totalHours: Math.round(totalHours * 100) / 100,
     days,

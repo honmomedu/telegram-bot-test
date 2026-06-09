@@ -69,6 +69,9 @@ export default function App() {
   const [faceConfidence, setFaceConfidence] = useState<number | null>(null);
   // The employee identified by the face during a check-in (auto-match)
   const [matchedEmployee, setMatchedEmployee] = useState<{ code: string; name: string } | null>(null);
+  // Substitution: this check-in is covering for another employee
+  const [allEmployees, setAllEmployees] = useState<{ code: string; name: string }[]>([]);
+  const [substituteFor, setSubstituteFor] = useState<string>('');
 
   // QR secrets (admin-generated, validated server-side config)
   const [validQrSecrets, setValidQrSecrets] = useState<string[]>(['SECURE_ATTEND_OFFICE_QR_2026']);
@@ -119,6 +122,16 @@ export default function App() {
       .then((data) => {
         if (Array.isArray(data.validSecrets) && data.validSecrets.length) {
           setValidQrSecrets(data.validSecrets);
+        }
+      })
+      .catch(() => {});
+
+    // Load employee list (for the substitution picker)
+    fetch('/api/employees')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data.employees)) {
+          setAllEmployees(data.employees.map((e: any) => ({ code: e.code, name: e.name })));
         }
       })
       .catch(() => {});
@@ -197,8 +210,9 @@ export default function App() {
     setPhoto(null);
     setFaceStatus('idle');
     setFaceConfidence(null);
+    setSubstituteFor('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user' }, // Strictly front camera
         audio: false 
       });
@@ -314,16 +328,19 @@ export default function App() {
           method,
           distance: distance != null ? Number(distance.toFixed(1)) : null,
           confidence: method === 'face' ? faceConfidence : null,
+          substituteFor: substituteFor || null,
         }),
       });
       const data = await res.json();
 
+      const subName = substituteFor ? (allEmployees.find((e) => e.code === substituteFor)?.name || substituteFor) : '';
       const who = id.name || id.code;
       const dmNote = data.telegramLinked
         ? (data.dmSent ? ' · ផ្ញើ DM ផ្ទាល់ ✓' : '')
         : ' (មិនទាន់ភ្ជាប់ Telegram ផ្ទាល់)';
+      const subNote = subName ? ` 🔄 (ជំនួសឱ្យ ${subName})` : '';
       setSuccessMessage(
-        `${who} — ${actType === 'IN' ? 'ចូលធ្វើការ' : 'ចេញពីធ្វើការ'} ត្រូវបានកត់ត្រាជោគជ័យ!${dmNote}`,
+        `${who} — ${actType === 'IN' ? 'ចូលធ្វើការ' : 'ចេញពីធ្វើការ'} ត្រូវបានកត់ត្រាជោគជ័យ!${subNote}${dmNote}`,
       );
     } catch (e) {
       console.error('Failed to record attendance:', e);
@@ -341,6 +358,7 @@ export default function App() {
     setQrActionType(null);
     setMatchedEmployee(null);
     setFaceStatus('idle');
+    setSubstituteFor('');
   };
 
   const handleQRScan = (results: any) => {
@@ -705,6 +723,27 @@ export default function App() {
                   {faceStatus === 'failed' && (
                     <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-red-500/20 text-red-300 font-semibold text-sm border border-red-400/30 text-center">
                       <AlertTriangle className="w-5 h-5 shrink-0" /> រកមិនឃើញបុគ្គលិក — មុខមិនត្រូវនឹងអ្នកណាម្នាក់ ឬមិនច្បាស់។ សូមថតម្ដងទៀត
+                    </div>
+                  )}
+
+                  {/* Substitution picker (only when a face is matched) */}
+                  {faceStatus === 'matched' && allEmployees.length > 0 && (
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+                      <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5 mb-1.5">
+                        <RefreshCw className="w-3.5 h-3.5" /> ការជំនួស (បើមកជំនួសគេ)
+                      </label>
+                      <select
+                        value={substituteFor}
+                        onChange={(e) => setSubstituteFor(e.target.value)}
+                        className="w-full bg-slate-800 text-white text-sm rounded-xl px-3 py-2.5 border border-white/10 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                      >
+                        <option value="">ខ្លួនឯង (មិនជំនួស)</option>
+                        {allEmployees
+                          .filter((e) => e.code !== matchedEmployee?.code)
+                          .map((e) => (
+                            <option key={e.code} value={e.code}>ជំនួសឱ្យ {e.name} ({e.code})</option>
+                          ))}
+                      </select>
                     </div>
                   )}
 

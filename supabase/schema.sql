@@ -106,3 +106,17 @@ CREATE TABLE IF NOT EXISTS payroll_adjustments (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_adjustments_emp_month ON payroll_adjustments(employee_code, month);
+
+-- 006 — Substitution + manual timesheet ---------------------
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS substitute_for TEXT;
+
+CREATE TABLE IF NOT EXISTS manual_hours (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  employee_code TEXT NOT NULL,
+  work_date TEXT NOT NULL,                  -- 'YYYY-MM-DD'
+  hours NUMERIC NOT NULL DEFAULT 0,
+  note TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE (employee_code, work_date)
+);
+CREATE INDEX IF NOT EXISTS idx_manual_hours_code ON manual_hours(employee_code);

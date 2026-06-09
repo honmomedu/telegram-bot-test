@@ -14,6 +14,7 @@ run ម្ដងទៀតក៏មិន error ទេ។
 | 3 | `003_face_and_qr.sql` | `face_enrollments`, `qr_codes` |
 | 4 | `004_employees_attendance.sql` | `employees`, `attendance` |
 | 5 | `005_payroll.sql` | `payroll_settings`, `payroll_adjustments` + employee salary fields |
+| 6 | `006_substitute_manual_hours.sql` | `manual_hours` + attendance.substitute_for |
 
 **ផ្លូវកាត់៖** អាច run ឯកសារតែមួយ [`../schema.sql`](../schema.sql) ដែលមានគ្រប់តារាងទាំងអស់ក្នុងពេលតែមួយ។
 

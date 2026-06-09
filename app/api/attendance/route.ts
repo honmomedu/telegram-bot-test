@@ -32,8 +32,19 @@ export async function POST(req: Request) {
     const distance = body.distance != null ? Number(body.distance) : null;
     const confidence = body.confidence != null ? Number(body.confidence) : null;
 
+    const substituteFor = body.substituteFor ? body.substituteFor.toString().trim() : null;
+
     if (!code) {
       return NextResponse.json({ success: false, error: 'Missing employee code' }, { status: 400 });
+    }
+
+    // Resolve who is being covered (substitution), if any.
+    let substituteName: string | null = null;
+    if (substituteFor) {
+      try {
+        const { data: sub } = await supabase.from('employees').select('name').eq('code', substituteFor).single();
+        substituteName = sub?.name || substituteFor;
+      } catch { substituteName = substituteFor; }
     }
 
     // Resolve the canonical employee name + telegram link.
@@ -61,7 +72,7 @@ export async function POST(req: Request) {
     try {
       const { data, error } = await supabase
         .from('attendance')
-        .insert({ employee_code: code, employee_name: name, type, method, distance, confidence })
+        .insert({ employee_code: code, employee_name: name, type, method, distance, confidence, substitute_for: substituteFor })
         .select('created_at')
         .single();
       if (!error && data?.created_at) savedAt = data.created_at;
@@ -74,19 +85,22 @@ export async function POST(req: Request) {
     const action = type === 'IN' ? 'ចូលធ្វើការ (Check IN)' : 'ចេញពីធ្វើការ (Check OUT)';
     const methodStr = method === 'qr' ? 'ស្កេន QR' : 'ផ្ទៀងផ្ទាត់មុខ (Face)';
 
+    const subLine = substituteName ? `\n🔄 *ជំនួសឱ្យ:* ${substituteName} (${substituteFor})` : '';
+
     const groupMsg =
       `🔔 *ការជូនដំណឹងវត្តមាន*\n\n` +
       `👤 *បុគ្គលិក:* ${name || code}\n` +
       `🆔 *លេខ:* ${code}\n` +
       `📍 *សកម្មភាព:* ${action}\n` +
-      `🔐 *វិធី:* ${methodStr}${confidence != null ? ` · ${confidence}%` : ''}\n` +
+      `🔐 *វិធី:* ${methodStr}${confidence != null ? ` · ${confidence}%` : ''}${subLine}\n` +
       `⏱ *ម៉ោង (server):* ${timeStr}` +
       (distance != null ? `\n🧭 *ចម្ងាយ:* ${distance}m` : '');
 
     const dmMsg =
       `✅ *កំណត់ត្រាវត្តមានជោគជ័យ*\n\n` +
-      `${action}\n⏱ ${timeStr}\n\n` +
-      `សូមអរគុណ ${name || ''}! 🙏`;
+      `${action}\n⏱ ${timeStr}` +
+      (substituteName ? `\n🔄 ជំនួសឱ្យ ${substituteName}` : '') +
+      `\n\nសូមអរគុណ ${name || ''}! 🙏`;
 
     const [groupSent, dmSent] = await Promise.all([
       GROUP_ID ? sendTelegram(GROUP_ID, groupMsg) : Promise.resolve(false),

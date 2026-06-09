@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState, useCallback } from 'react';
-import { Loader2, Download, Send, Plus, Minus, Settings2, X, DollarSign, CheckCircle2, Sparkles } from 'lucide-react';
+import { Loader2, Download, Send, Plus, Minus, Settings2, X, DollarSign, CheckCircle2, Sparkles, Clock, Trash2 } from 'lucide-react';
 
 interface Row {
   code: string; name: string; department: string | null;
@@ -25,6 +25,7 @@ export default function PayrollPanel() {
   const [sending, setSending] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [adjFor, setAdjFor] = useState<Row | null>(null);
+  const [timesheetFor, setTimesheetFor] = useState<Row | null>(null);
 
   const sym = (n: number) => currency === 'KHR' ? `${Math.round(n).toLocaleString()}៛` : `$${n.toFixed(2)}`;
 
@@ -189,6 +190,7 @@ export default function PayrollPanel() {
                   <td className="text-right px-3 py-3 font-bold text-slate-900">{sym(r.net)}</td>
                   <td className="px-2 py-3">
                     <div className="flex items-center gap-1 justify-end">
+                      <button onClick={() => setTimesheetFor(r)} title="Timesheet (បញ្ចូលម៉ោងតាមថ្ងៃ)" className="p-1.5 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-600"><Clock size={14} /></button>
                       <button onClick={() => setAdjFor(r)} title="កែតម្រូវ" className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600"><Plus size={14} /></button>
                       <button onClick={() => sendPayslip(r.code)} disabled={sending !== null} title="ផ្ញើ Payslip" className="p-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-600 disabled:opacity-50">
                         {sending === r.code ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
@@ -204,6 +206,9 @@ export default function PayrollPanel() {
 
       {/* Adjustment modal */}
       {adjFor && <AdjustModal row={adjFor} month={month} sym={sym} onClose={() => setAdjFor(null)} onSaved={() => { setAdjFor(null); load(month); flash('បានបន្ថែមការកែតម្រូវ'); }} />}
+
+      {/* Timesheet modal */}
+      {timesheetFor && <TimesheetModal row={timesheetFor} month={month} onClose={() => setTimesheetFor(null)} onChanged={() => load(month)} />}
 
       {/* Toast */}
       {toast && (
@@ -272,6 +277,79 @@ function AdjustModal({ row, month, sym, onClose, onSaved }: { row: Row; month: s
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function TimesheetModal({ row, month, onClose, onChanged }: { row: Row; month: string; onClose: () => void; onChanged: () => void }) {
+  const [date, setDate] = useState(`${month}-01`);
+  const [hours, setHours] = useState('');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [list, setList] = useState<any[]>([]);
+
+  const loadList = useCallback(() => {
+    fetch(`/api/payroll/manual-hours?month=${month}&code=${row.code}`).then((r) => r.json()).then((d) => setList(d.entries || []));
+  }, [month, row.code]);
+  useEffect(() => { loadList(); }, [loadList]);
+
+  const save = async () => {
+    const h = Number(hours);
+    if (isNaN(h) || h < 0 || !date.startsWith(month)) return;
+    setSaving(true);
+    await fetch('/api/payroll/manual-hours', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employee_code: row.code, work_date: date, hours: h, note }) });
+    setHours(''); setNote(''); setSaving(false); loadList(); onChanged();
+  };
+
+  const del = async (id: string) => { await fetch(`/api/payroll/manual-hours?id=${id}`, { method: 'DELETE' }); loadList(); onChanged(); };
+
+  const total = list.reduce((s, e) => s + Number(e.hours || 0), 0);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2"><Clock className="w-5 h-5 text-violet-500" /> Timesheet (បញ្ចូលម៉ោង)</h3>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-100"><X className="w-5 h-5 text-slate-500" /></button>
+        </div>
+        <p className="text-sm text-slate-500 mb-4">{row.name} ({row.code}) · ខែ {month}{row.payType === 'hourly' ? ` · $${row.hourlyRate}/ម៉ោង` : ''}</p>
+
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">ថ្ងៃ</label>
+            <input type="date" value={date} min={`${month}-01`} max={`${month}-31`} onChange={(e) => setDate(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">ម៉ោង</label>
+            <input type="number" step="0.5" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="ឧ. 3"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" />
+          </div>
+        </div>
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="កំណត់ចំណាំ (ស្រេចចិត្ត)"
+          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm mb-3" />
+        <button onClick={save} disabled={saving || hours === ''} className="w-full brand-gradient disabled:opacity-50 text-white py-3 rounded-xl font-bold shadow-glow-brand active:scale-95 transition">
+          {saving ? 'កំពុងរក្សាទុក...' : 'រក្សាទុកម៉ោងថ្ងៃនេះ'}
+        </button>
+
+        <div className="mt-4 flex items-center justify-between text-sm font-semibold text-slate-700">
+          <span>ម៉ោងសរុបក្នុងខែ</span><span className="text-violet-600">{Math.round(total * 100) / 100}h</span>
+        </div>
+        {list.length > 0 && (
+          <div className="mt-2 space-y-2 max-h-44 overflow-y-auto">
+            {list.map((e) => (
+              <div key={e.id} className="flex items-center justify-between text-sm bg-slate-50 rounded-xl px-3 py-2">
+                <span className="font-semibold text-slate-700">{e.work_date.slice(5)}</span>
+                <span className="text-violet-600 font-semibold">{e.hours}h</span>
+                <span className="text-xs text-slate-500 flex-1 px-2 truncate text-right">{e.note || ''}</span>
+                <button onClick={() => del(e.id)} className="text-slate-400 hover:text-red-500"><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">ម៉ោងដែលបញ្ចូលនៅទីនេះ នឹង override ម៉ោងគិតពី IN/OUT សម្រាប់ថ្ងៃនោះ (សម្រាប់បុគ្គលិក part-time / កែតម្រូវ)។</p>
       </div>
     </div>
   );

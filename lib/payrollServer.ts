@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import {
-  AttRecord, EmployeeLite, PayrollSettings, Adjustment, DEFAULT_SETTINGS,
+  AttRecord, EmployeeLite, PayrollSettings, Adjustment, DEFAULT_SETTINGS, ManualHour,
   buildReport, computeSalary, monthRange, AttendanceReport, SalaryResult,
 } from './payroll';
 
@@ -48,6 +48,22 @@ export async function loadAttendanceForMonth(month: string): Promise<AttRecord[]
   return out;
 }
 
+export async function loadManualHours(month: string): Promise<Map<string, Map<string, ManualHour>>> {
+  const map = new Map<string, Map<string, ManualHour>>();
+  try {
+    const { data } = await supabase
+      .from('manual_hours')
+      .select('employee_code, work_date, hours, note')
+      .like('work_date', `${month}-%`);
+    for (const m of data || []) {
+      const inner = map.get(m.employee_code) || new Map<string, ManualHour>();
+      inner.set(m.work_date, { hours: Number(m.hours || 0), note: m.note });
+      map.set(m.employee_code, inner);
+    }
+  } catch { /* ignore */ }
+  return map;
+}
+
 export async function loadAdjustments(month: string): Promise<Map<string, Adjustment[]>> {
   const map = new Map<string, Adjustment[]>();
   try {
@@ -72,11 +88,12 @@ export interface PayrollRow {
 
 /** Build the full payroll report for a month (all active employees). */
 export async function buildPayrollReport(month: string): Promise<{ rows: PayrollRow[]; settings: PayrollSettings }> {
-  const [settings, employees, attendance, adjMap] = await Promise.all([
+  const [settings, employees, attendance, adjMap, manualMap] = await Promise.all([
     loadSettings(),
     loadEmployees(),
     loadAttendanceForMonth(month),
     loadAdjustments(month),
+    loadManualHours(month),
   ]);
 
   const byEmp = new Map<string, AttRecord[]>();
@@ -87,7 +104,7 @@ export async function buildPayrollReport(month: string): Promise<{ rows: Payroll
   }
 
   const rows: PayrollRow[] = employees.map((emp) => {
-    const report = buildReport(emp.code, byEmp.get(emp.code) || [], settings);
+    const report = buildReport(emp.code, byEmp.get(emp.code) || [], settings, manualMap.get(emp.code));
     const salary = computeSalary(emp, report, settings, adjMap.get(emp.code) || []);
     return { emp, report, salary };
   });
