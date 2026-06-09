@@ -133,6 +133,16 @@ export default function App() {
       .then((rec) => setEnrollment(rec))
       .catch(() => {});
     loadHistory(employee.code);
+
+    // Auto-link Telegram for private DM when opened inside the Mini App
+    const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user;
+    if (tgUser?.id) {
+      fetch('/api/employees/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: employee.code, telegramId: tgUser.id }),
+      }).catch(() => {});
+    }
   }, [isClient, employee, loadHistory]);
 
   // Strict Geolocation fetching
