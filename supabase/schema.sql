@@ -120,3 +120,6 @@ CREATE TABLE IF NOT EXISTS manual_hours (
   UNIQUE (employee_code, work_date)
 );
 CREATE INDEX IF NOT EXISTS idx_manual_hours_code ON manual_hours(employee_code);
+
+-- 007 — Weekly schedule (part-time) -------------------------
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_schedule JSONB;

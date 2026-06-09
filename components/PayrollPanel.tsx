@@ -1,10 +1,11 @@
 'use client';
 import React, { useEffect, useState, useCallback } from 'react';
-import { Loader2, Download, Send, Plus, Minus, Settings2, X, DollarSign, CheckCircle2, Sparkles, Clock, Trash2 } from 'lucide-react';
+import { Loader2, Download, Send, Plus, Minus, Settings2, X, DollarSign, CheckCircle2, Sparkles, Clock, Trash2, Pencil, CalendarRange } from 'lucide-react';
 
+type Weekly = { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number };
 interface Row {
   code: string; name: string; department: string | null;
-  payType: 'monthly' | 'hourly'; baseSalary: number; hourlyRate: number;
+  payType: 'monthly' | 'hourly'; baseSalary: number; hourlyRate: number; workSchedule: Weekly | null;
   telegramLinked: boolean; daysPresent: number; lateCount: number; totalHours: number; absentDays: number;
   gross: number; additions: number; deductions: number; lateDeduction: number; absentDeduction: number; net: number;
 }
@@ -26,6 +27,7 @@ export default function PayrollPanel() {
   const [toast, setToast] = useState<string | null>(null);
   const [adjFor, setAdjFor] = useState<Row | null>(null);
   const [timesheetFor, setTimesheetFor] = useState<Row | null>(null);
+  const [compFor, setCompFor] = useState<Row | null>(null);
 
   const sym = (n: number) => currency === 'KHR' ? `${Math.round(n).toLocaleString()}៛` : `$${n.toFixed(2)}`;
 
@@ -150,8 +152,7 @@ export default function PayrollPanel() {
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase">
               <tr>
                 <th className="text-left px-4 py-3 font-semibold">បុគ្គលិក</th>
-                <th className="text-center px-2 py-3 font-semibold">ប្រភេទ</th>
-                <th className="text-center px-2 py-3 font-semibold">គោល/ម៉ោង</th>
+                <th className="text-center px-2 py-3 font-semibold">សំណង</th>
                 <th className="text-center px-2 py-3 font-semibold">ថ្ងៃ/យឺត</th>
                 <th className="text-right px-2 py-3 font-semibold">Gross</th>
                 <th className="text-right px-2 py-3 font-semibold">កែតម្រូវ</th>
@@ -169,16 +170,10 @@ export default function PayrollPanel() {
                     <div className="text-xs text-slate-400">{r.code}</div>
                   </td>
                   <td className="text-center px-2 py-3">
-                    <select value={r.payType} onChange={(e) => patchEmployee(r.code, { pay_type: e.target.value })}
-                      className="text-xs border border-slate-200 rounded-lg px-1.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-brand-500">
-                      <option value="monthly">ខែ</option>
-                      <option value="hourly">ម៉ោង</option>
-                    </select>
-                  </td>
-                  <td className="text-center px-2 py-3">
-                    <input type="number" defaultValue={r.payType === 'hourly' ? r.hourlyRate : r.baseSalary}
-                      onBlur={(e) => { const v = Number(e.target.value); const f = r.payType === 'hourly' ? { hourly_rate: v } : { base_salary: v }; patchEmployee(r.code, f); }}
-                      className="w-20 text-right text-xs border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-500" />
+                    <button onClick={() => setCompFor(r)} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700 transition">
+                      <span>{r.payType === 'hourly' ? `${sym(r.hourlyRate)}/ម៉ោង` : `${sym(r.baseSalary)}/ខែ`}</span>
+                      <Pencil size={11} className="text-slate-400" />
+                    </button>
                   </td>
                   <td className="text-center px-2 py-3 text-xs text-slate-600">{r.daysPresent}d · <span className={r.lateCount ? 'text-amber-600' : ''}>{r.lateCount}L</span></td>
                   <td className="text-right px-2 py-3 text-slate-600">{sym(r.gross)}</td>
@@ -209,6 +204,9 @@ export default function PayrollPanel() {
 
       {/* Timesheet modal */}
       {timesheetFor && <TimesheetModal row={timesheetFor} month={month} onClose={() => setTimesheetFor(null)} onChanged={() => load(month)} />}
+
+      {/* Compensation + schedule modal */}
+      {compFor && <CompensationModal row={compFor} currency={currency} onClose={() => setCompFor(null)} onSaved={() => { setCompFor(null); load(month); flash('បានរក្សាទុកសំណង'); }} />}
 
       {/* Toast */}
       {toast && (
@@ -350,6 +348,94 @@ function TimesheetModal({ row, month, onClose, onChanged }: { row: Row; month: s
           </div>
         )}
         <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">ម៉ោងដែលបញ្ចូលនៅទីនេះ នឹង override ម៉ោងគិតពី IN/OUT សម្រាប់ថ្ងៃនោះ (សម្រាប់បុគ្គលិក part-time / កែតម្រូវ)។</p>
+      </div>
+    </div>
+  );
+}
+
+const DAYS: { k: keyof Weekly; label: string }[] = [
+  { k: 'mon', label: 'ច័ន្ទ' }, { k: 'tue', label: 'អង្គារ' }, { k: 'wed', label: 'ពុធ' },
+  { k: 'thu', label: 'ព្រហស្បតិ៍' }, { k: 'fri', label: 'សុក្រ' }, { k: 'sat', label: 'សៅរ៍' }, { k: 'sun', label: 'អាទិត្យ' },
+];
+const EMPTY_WEEK: Weekly = { mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 };
+
+function CompensationModal({ row, currency, onClose, onSaved }: { row: Row; currency: string; onClose: () => void; onSaved: () => void }) {
+  const [payType, setPayType] = useState<'monthly' | 'hourly'>(row.payType);
+  const [base, setBase] = useState(String(row.baseSalary || ''));
+  const [rate, setRate] = useState(String(row.hourlyRate || ''));
+  const [sched, setSched] = useState<Weekly>({ ...EMPTY_WEEK, ...(row.workSchedule || {}) });
+  const [saving, setSaving] = useState(false);
+  const cur = currency === 'KHR' ? '៛' : '$';
+
+  const setDay = (k: keyof Weekly, v: string) => setSched((s) => ({ ...s, [k]: Math.max(0, Number(v) || 0) }));
+  const weekTotal = DAYS.reduce((s, d) => s + (sched[d.k] || 0), 0);
+
+  const save = async () => {
+    setSaving(true);
+    const hasSchedule = weekTotal > 0;
+    await fetch('/api/employees', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: row.code, pay_type: payType,
+        base_salary: Number(base) || 0, hourly_rate: Number(rate) || 0,
+        work_schedule: hasSchedule ? sched : null,
+      }),
+    });
+    setSaving(false); onSaved();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2"><DollarSign className="w-5 h-5 text-brand-500" /> សំណង & កាលវិភាគ</h3>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-100"><X className="w-5 h-5 text-slate-500" /></button>
+        </div>
+        <p className="text-sm text-slate-500 mb-4">{row.name} ({row.code})</p>
+
+        {/* Pay type */}
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setPayType('monthly')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition ${payType === 'monthly' ? 'brand-gradient text-white shadow-glow-brand' : 'bg-slate-100 text-slate-500'}`}>ប្រាក់ខែថេរ</button>
+          <button onClick={() => setPayType('hourly')} className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition ${payType === 'hourly' ? 'brand-gradient text-white shadow-glow-brand' : 'bg-slate-100 text-slate-500'}`}>គិតតាមម៉ោង</button>
+        </div>
+
+        {/* Amount */}
+        {payType === 'monthly' ? (
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-slate-600 mb-1">ប្រាក់ខែគោល / ខែ ({cur})</label>
+            <input type="number" value={base} onChange={(e) => setBase(e.target.value)} placeholder="ឧ. 300"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" />
+          </div>
+        ) : (
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-slate-600 mb-1">តម្លៃ / ម៉ោង ({cur})</label>
+            <input type="number" step="0.25" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="ឧ. 2.5"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" />
+          </div>
+        )}
+
+        {/* Weekly schedule */}
+        <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-bold text-slate-700 flex items-center gap-1.5"><CalendarRange className="w-4 h-4 text-violet-500" /> កាលវិភាគប្រចាំសប្តាហ៍</span>
+            <span className="text-xs text-slate-500">សរុប {weekTotal}h/សប្តាហ៍</span>
+          </div>
+          <p className="text-[11px] text-slate-400 mb-2">ម៉ោងរំពឹងក្នុងមួយថ្ងៃ (0 = ឈប់/មិនធ្វើ)។ ប្រើសម្រាប់ part-time និងរកអវត្តមាន។</p>
+          <div className="space-y-1.5">
+            {DAYS.map((d) => (
+              <div key={d.k} className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-600 w-20">{d.label}</span>
+                <input type="number" step="0.5" min="0" value={sched[d.k] || ''} onChange={(e) => setDay(d.k, e.target.value)} placeholder="0"
+                  className="flex-1 px-3 py-1.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm" />
+                <span className="text-xs text-slate-400 w-10">ម៉ោង</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={save} disabled={saving} className="w-full mt-5 brand-gradient disabled:opacity-50 text-white py-3 rounded-xl font-bold shadow-glow-brand active:scale-95 transition">
+          {saving ? 'កំពុងរក្សាទុក...' : 'រក្សាទុក'}
+        </button>
       </div>
     </div>
   );

@@ -29,7 +29,8 @@
     "react-dom": "^19.2.1",
     "react-leaflet": "^5.0.0",
     "tailwind-merge": "^3.3.1",
-    "telegraf": "^4.16.3"
+    "telegraf": "^4.16.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.11",

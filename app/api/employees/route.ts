@@ -82,6 +82,7 @@ export async function PATCH(req: Request) {
     if (b.pay_type != null) patch.pay_type = b.pay_type === 'hourly' ? 'hourly' : 'monthly';
     if (b.base_salary != null) patch.base_salary = Number(b.base_salary) || 0;
     if (b.hourly_rate != null) patch.hourly_rate = Number(b.hourly_rate) || 0;
+    if (b.work_schedule !== undefined) patch.work_schedule = b.work_schedule;
     if (b.active != null) patch.active = !!b.active;
 
     if (Object.keys(patch).length === 0) {

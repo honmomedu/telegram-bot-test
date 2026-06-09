@@ -31,6 +31,8 @@ export const DEFAULT_SETTINGS: PayrollSettings = {
   payday: 28,
 };
 
+export interface WeeklySchedule { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number }
+
 export interface EmployeeLite {
   code: string;
   name: string;
@@ -38,6 +40,7 @@ export interface EmployeeLite {
   pay_type?: string | null; // 'monthly' | 'hourly'
   base_salary?: number | null;
   hourly_rate?: number | null;
+  work_schedule?: WeeklySchedule | null;
 }
 
 export interface DaySummary {

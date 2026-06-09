@@ -1,12 +1,13 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Users, AlertCircle, CheckCircle2, ShieldCheck, Settings, Bell, Search, UserPlus, LogOut, Download, QrCode, MapPin, Loader2, RefreshCw, Trash2, BarChart3, Wallet } from 'lucide-react';
+import { Users, AlertCircle, CheckCircle2, ShieldCheck, Settings, Bell, Search, UserPlus, LogOut, Download, QrCode, MapPin, Loader2, RefreshCw, Trash2, BarChart3, Wallet, FileSpreadsheet } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 
 const QrGenerator = dynamic(() => import('../../components/QrGenerator'), { ssr: false });
 const ReportsPanel = dynamic(() => import('../../components/ReportsPanel'), { ssr: false });
 const PayrollPanel = dynamic(() => import('../../components/PayrollPanel'), { ssr: false });
+const ImportEmployeesModal = dynamic(() => import('../../components/ImportEmployeesModal'), { ssr: false });
 
 interface Employee {
   id?: string;
@@ -83,6 +84,7 @@ export default function AdminDashboard() {
 
   // Employees
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [showImport, setShowImport] = useState(false);
   const [empLoading, setEmpLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({ code: '', name: '', department: '' });
@@ -355,10 +357,17 @@ export default function AdminDashboard() {
                        <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">គ្រប់គ្រងបុគ្គលិក</h2>
                        <p className="text-slate-500 mt-1">បង្កើតលេខបុគ្គលិក (Employee ID) → បុគ្គលិក activate + ចុះឈ្មោះមុខ ដោយខ្លួនឯង</p>
                    </div>
-                   <button onClick={exportCsv} className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition shadow-sm">
-                       <Download size={16} /> Export CSV
-                   </button>
+                   <div className="flex items-center gap-2">
+                     <button onClick={() => setShowImport(true)} className="flex items-center gap-2 px-4 py-2 brand-gradient text-white rounded-lg text-sm font-semibold transition shadow-glow-brand">
+                         <FileSpreadsheet size={16} /> បញ្ចូលពី Excel
+                     </button>
+                     <button onClick={exportCsv} className="flex items-center gap-2 px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition shadow-sm">
+                         <Download size={16} /> Export CSV
+                     </button>
+                   </div>
                 </header>
+
+                {showImport && <ImportEmployeesModal onClose={() => setShowImport(false)} onImported={loadEmployees} />}
 
                 {/* Add employee form */}
                 <form onSubmit={addEmployee} className="bg-white rounded-2xl shadow-card border border-slate-100 p-5">

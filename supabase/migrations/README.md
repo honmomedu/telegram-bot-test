@@ -15,6 +15,7 @@ run ម្ដងទៀតក៏មិន error ទេ។
 | 4 | `004_employees_attendance.sql` | `employees`, `attendance` |
 | 5 | `005_payroll.sql` | `payroll_settings`, `payroll_adjustments` + employee salary fields |
 | 6 | `006_substitute_manual_hours.sql` | `manual_hours` + attendance.substitute_for |
+| 7 | `007_work_schedule.sql` | employees.work_schedule (weekly part-time schedule) |
 
 **ផ្លូវកាត់៖** អាច run ឯកសារតែមួយ [`../schema.sql`](../schema.sql) ដែលមានគ្រប់តារាងទាំងអស់ក្នុងពេលតែមួយ។
 

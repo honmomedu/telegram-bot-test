@@ -16,7 +16,7 @@ export async function loadEmployees(): Promise<EmployeeLite[]> {
   try {
     const { data } = await supabase
       .from('employees')
-      .select('code, name, department, pay_type, base_salary, hourly_rate, telegram_id, active')
+      .select('code, name, department, pay_type, base_salary, hourly_rate, work_schedule, telegram_id, active')
       .order('code');
     return (data || []).filter((e: any) => e.active !== false) as EmployeeLite[];
   } catch {
