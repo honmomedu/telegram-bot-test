@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Camera, MapPin, Clock, History as HistoryIcon, ShieldCheck, UserCheck, CheckCircle2, XCircle, RefreshCw, Info, AlertTriangle, Navigation, Image as ImageIcon, X, QrCode, Settings, ScanFace, Loader2, UserPlus } from 'lucide-react';
+import { Camera, MapPin, Clock, History as HistoryIcon, ShieldCheck, UserCheck, CheckCircle2, XCircle, RefreshCw, Info, AlertTriangle, Navigation, Image as ImageIcon, X, QrCode, Settings, ScanFace, Loader2, UserPlus, CreditCard, Nfc } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'motion/react';
 import { Scanner } from '@yudiel/react-qr-scanner';
@@ -50,7 +50,10 @@ export default function App() {
   const [cameraActive, setCameraActive] = useState(false);
   const [photo, setPhoto] = useState<string | null>(null);
   const [actionType, setActionType] = useState<'IN' | 'OUT' | null>(null);
-  const [verifyMethod, setVerifyMethod] = useState<'camera' | 'qr'>('camera');
+  const [verifyMethod, setVerifyMethod] = useState<'camera' | 'qr' | 'card' | 'nfc'>('camera');
+  const [scanKind, setScanKind] = useState<'office' | 'card'>('office');
+  const [orgMethods, setOrgMethods] = useState<{ face: boolean; office_qr: boolean; qr_card: boolean; nfc: boolean; manual: boolean }>({ face: true, office_qr: true, qr_card: false, nfc: false, manual: false });
+  const [nfcScanning, setNfcScanning] = useState<null | 'IN' | 'OUT'>(null);
   const [qrActionType, setQrActionType] = useState<'IN' | 'OUT' | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -128,6 +131,12 @@ export default function App() {
       })
       .catch(() => {});
 
+    // Load this org's enabled attendance methods
+    fetch('/api/org')
+      .then((res) => res.json())
+      .then((data) => { if (data.methods) setOrgMethods(data.methods); })
+      .catch(() => {});
+
     // Load employee list (for the substitution picker)
     fetch('/api/employees')
       .then((res) => res.json())
@@ -140,6 +149,15 @@ export default function App() {
 
     return () => clearInterval(timer);
   }, []);
+
+  // Keep the selected verify method valid for this org's enabled methods
+  useEffect(() => {
+    const ok: Record<string, boolean> = { camera: orgMethods.face, qr: orgMethods.office_qr, card: orgMethods.qr_card, nfc: orgMethods.nfc };
+    if (!ok[verifyMethod]) {
+      const first = (['camera', 'qr', 'card', 'nfc'] as const).find((m) => ok[m]);
+      if (first) setVerifyMethod(first);
+    }
+  }, [orgMethods, verifyMethod]);
 
   // Load the employee's face enrollment + attendance history once activated
   useEffect(() => {
@@ -363,17 +381,85 @@ export default function App() {
     setSubstituteFor('');
   };
 
-  const handleQRScan = (results: any) => {
+  // Record attendance for a specific employee (card / NFC kiosk flows)
+  const recordByCode = async (code: string, name: string, type: 'IN' | 'OUT', method: 'qr_card' | 'nfc') => {
+    try {
+      const res = await fetch('/api/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, name, type, method, distance: distance != null ? Number(distance.toFixed(1)) : null }),
+      });
+      const data = await res.json();
+      const dmNote = data.telegramLinked ? (data.dmSent ? ' · DM ✓' : '') : '';
+      setSuccessMessage(`${name || code} — ${type === 'IN' ? 'ចូលធ្វើការ' : 'ចេញពីធ្វើការ'} ត្រូវបានកត់ត្រាជោគជ័យ!${dmNote}`);
+    } catch {
+      setSuccessMessage('មានបញ្ហាក្នុងការកត់ត្រា។');
+    }
+    if (employee) loadHistory(employee.code);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 2800);
+  };
+
+  const handleQRScan = async (results: any) => {
      if (!results || results.length === 0) return;
      const text = results[0]?.rawValue || results[0]?.text || results?.text || results;
      if (typeof text !== 'string') return;
+     const type = qrActionType;
 
+     if (scanKind === 'card') {
+        // Scan an employee QR card -> identify -> record
+        try {
+          const res = await fetch('/api/employees/by-card', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ card: text }),
+          });
+          const data = await res.json();
+          setQrActionType(null);
+          if (data.matched) await recordByCode(data.code, data.name, type as 'IN' | 'OUT', 'qr_card');
+          else alert('កាតមិនត្រឹមត្រូវ ឬរកបុគ្គលិកមិនឃើញ!');
+        } catch { setQrActionType(null); alert('មានបញ្ហាស្កេនកាត។'); }
+        return;
+     }
+
+     // Office QR
      if (validQrSecrets.includes(text)) {
          submitAttendance('qr');
      } else {
          alert('QR Code មិនត្រឹមត្រូវទេ! (តម្រូវឲ្យស្កេន QR ការិយាល័យ)');
          setQrActionType(null);
      }
+  };
+
+  // NFC tap check-in (Android Chrome only)
+  const startNfcScan = async (type: 'IN' | 'OUT') => {
+    if (typeof window === 'undefined' || !('NDEFReader' in window)) {
+      alert('ឧបករណ៍នេះមិនគាំទ្រ NFC ទេ (ប្រើ Chrome លើ Android)។');
+      return;
+    }
+    setNfcScanning(type);
+    try {
+      const reader = new (window as any).NDEFReader();
+      await reader.scan();
+      const serial: string = await new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('timeout')), 25000);
+        reader.onreading = (ev: any) => { clearTimeout(t); resolve(ev.serialNumber); };
+        reader.onreadingerror = () => { clearTimeout(t); reject(new Error('err')); };
+      });
+      const res = await fetch(`/api/employees/by-nfc?nfc=${encodeURIComponent(serial)}`);
+      const data = await res.json();
+      setNfcScanning(null);
+      if (data.matched) await recordByCode(data.code, data.name, type, 'nfc');
+      else alert('កាត NFC នេះមិនទាន់ចុះបញ្ជី ឬរកបុគ្គលិកមិនឃើញ!');
+    } catch {
+      setNfcScanning(null);
+      alert('មិនអាចអាន NFC បានទេ។ សូមប៉ះកាតម្ដងទៀត។');
+    }
+  };
+
+  const onActionClick = (type: 'IN' | 'OUT') => {
+    if (verifyMethod === 'camera') return openCameraFlow(type);
+    if (verifyMethod === 'qr') { setScanKind('office'); return setQrActionType(type); }
+    if (verifyMethod === 'card') { setScanKind('card'); return setQrActionType(type); }
+    if (verifyMethod === 'nfc') return startNfcScan(type);
   };
 
   // Wait until we know whether a device employee exists (avoid flash)
@@ -563,21 +649,25 @@ export default function App() {
               )}
             </div>
 
-            {/* Verification Method Toggle */}
-            <div className="flex bg-white border border-slate-100 shadow-card p-1 rounded-2xl mt-2">
-               <button onClick={() => setVerifyMethod('camera')} className={`flex-1 py-2.5 flex justify-center items-center gap-2 text-sm font-bold rounded-xl transition-all ${verifyMethod === 'camera' ? 'brand-gradient text-white shadow-glow-brand' : 'text-slate-500'}`}>
-                  <Camera className="w-4 h-4" /> ថតមុខ (Selfie)
-               </button>
-               <button onClick={() => setVerifyMethod('qr')} className={`flex-1 py-2.5 flex justify-center items-center gap-2 text-sm font-bold rounded-xl transition-all ${verifyMethod === 'qr' ? 'brand-gradient text-white shadow-glow-brand' : 'text-slate-500'}`}>
-                  <QrCode className="w-4 h-4" /> ស្កេន QR
-               </button>
+            {/* Verification Method Toggle (only methods this org enabled) */}
+            <div className="flex flex-wrap bg-white border border-slate-100 shadow-card p-1 rounded-2xl mt-2 gap-1">
+               {([
+                 orgMethods.face && { k: 'camera', icon: Camera, label: 'ថតមុខ' },
+                 orgMethods.office_qr && { k: 'qr', icon: QrCode, label: 'QR ការិយាល័យ' },
+                 orgMethods.qr_card && { k: 'card', icon: CreditCard, label: 'ស្កេនកាត' },
+                 orgMethods.nfc && { k: 'nfc', icon: Nfc, label: 'NFC' },
+               ].filter(Boolean) as { k: any; icon: any; label: string }[]).map(({ k, icon: Icon, label }) => (
+                 <button key={k} onClick={() => setVerifyMethod(k)} className={`flex-1 min-w-[28%] py-2.5 flex justify-center items-center gap-1.5 text-xs font-bold rounded-xl transition-all ${verifyMethod === k ? 'brand-gradient text-white shadow-glow-brand' : 'text-slate-500'}`}>
+                   <Icon className="w-4 h-4" /> {label}
+                 </button>
+               ))}
             </div>
 
             {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-4 mt-2">
               <button
                 disabled={!isWithinRadius}
-                onClick={() => verifyMethod === 'camera' ? openCameraFlow('IN') : setQrActionType('IN')}
+                onClick={() => onActionClick('IN')}
                 className="group bg-gradient-to-br from-emerald-500 to-emerald-600 text-white disabled:from-slate-200 disabled:to-slate-300 disabled:text-slate-400 disabled:shadow-none py-5 rounded-2xl font-bold shadow-glow-emerald active:scale-95 transition-all flex flex-col items-center justify-center gap-2"
               >
                 <div className="bg-white/20 p-2.5 rounded-full group-active:scale-90 transition-transform"><UserCheck className="w-6 h-6" /></div>
@@ -586,7 +676,7 @@ export default function App() {
 
               <button
                 disabled={!isWithinRadius}
-                onClick={() => verifyMethod === 'camera' ? openCameraFlow('OUT') : setQrActionType('OUT')}
+                onClick={() => onActionClick('OUT')}
                 className="group bg-gradient-to-br from-amber-400 to-orange-500 text-white disabled:from-slate-200 disabled:to-slate-300 disabled:text-slate-400 disabled:shadow-none py-5 rounded-2xl font-bold shadow-[0_10px_30px_-8px_rgba(245,158,11,0.5)] active:scale-95 transition-all flex flex-col items-center justify-center gap-2"
               >
                 <div className="bg-black/10 p-2.5 rounded-full group-active:scale-90 transition-transform"><Clock className="w-6 h-6" /></div>
@@ -802,22 +892,36 @@ export default function App() {
       {qrActionType && (
         <div className="fixed inset-0 bg-black z-50 flex flex-col slide-in-from-bottom-full animate-in duration-300">
            <div className="p-4 flex items-center justify-between text-white font-medium bg-gradient-to-b from-black/80 to-transparent absolute top-0 w-full z-10">
-              <span>{qrActionType === 'IN' ? 'ឆែកចូល (Check IN)' : 'ឆែកចេញ (Check OUT)'} - ស្កេន QR</span>
+              <span>{qrActionType === 'IN' ? 'ឆែកចូល (Check IN)' : 'ឆែកចេញ (Check OUT)'} - {scanKind === 'card' ? 'ស្កេនកាតបុគ្គលិក' : 'ស្កេន QR'}</span>
               <button onClick={() => setQrActionType(null)} className="p-2 bg-white/20 rounded-full hover:bg-white/30 backdrop-blur">
                  <X className="w-5 h-5" />
               </button>
            </div>
-           
+
            <div className="flex-1 flex flex-col items-center justify-center">
                <div className="w-[80vw] h-[80vw] max-w-sm max-h-sm overflow-hidden rounded-3xl border-4 border-indigo-500 bg-slate-900">
                    <Scanner onScan={handleQRScan} />
                </div>
            </div>
-           
+
            <div className="bg-black text-white p-8 pb-12 flex flex-col items-center justify-center text-sm text-center">
-              <QrCode className="w-8 h-8 mb-4 text-indigo-400" />
-              ស្វែងរក QR Code របស់ការិយាល័យដើម្បីស្កេននិងផ្ទៀងផ្ទាត់វត្តមានរបស់អ្នក។
+              {scanKind === 'card' ? <CreditCard className="w-8 h-8 mb-4 text-indigo-400" /> : <QrCode className="w-8 h-8 mb-4 text-indigo-400" />}
+              {scanKind === 'card' ? 'ស្កេនកាត QR របស់បុគ្គលិក ដើម្បីចុះវត្តមាន។' : 'ស្វែងរក QR Code របស់ការិយាល័យដើម្បីស្កេននិងផ្ទៀងផ្ទាត់វត្តមានរបស់អ្នក។'}
            </div>
+        </div>
+      )}
+
+      {/* FULLSCREEN NFC OVERLAY */}
+      {nfcScanning && (
+        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center text-white px-6">
+          <button onClick={() => setNfcScanning(null)} className="absolute top-4 right-4 p-2 bg-white/15 rounded-full"><X className="w-5 h-5" /></button>
+          <div className="relative">
+            <div className="absolute inset-0 rounded-full bg-brand-500/40 animate-pulse-ring" />
+            <div className="w-28 h-28 rounded-full brand-gradient flex items-center justify-center shadow-glow-brand relative"><Nfc className="w-12 h-12" /></div>
+          </div>
+          <h3 className="mt-8 text-lg font-bold">{nfcScanning === 'IN' ? 'ឆែកចូល' : 'ឆែកចេញ'} — ប៉ះកាត NFC</h3>
+          <p className="text-sm text-slate-400 mt-2 text-center">សូមប៉ះកាត NFC របស់បុគ្គលិកទៅខាងក្រោយទូរស័ព្ទ...</p>
+          <Loader2 className="w-6 h-6 animate-spin text-brand-300 mt-6" />
         </div>
       )}
 

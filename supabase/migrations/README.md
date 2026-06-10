@@ -17,6 +17,7 @@ run ម្ដងទៀតក៏មិន error ទេ។
 | 6 | `006_substitute_manual_hours.sql` | `manual_hours` + attendance.substitute_for |
 | 7 | `007_work_schedule.sql` | employees.work_schedule (weekly part-time schedule) |
 | 8 | `008_organizations.sql` | `organizations` (multi-tenant) + org_id on all tenant tables |
+| 9 | `009_employee_cards.sql` | employees.nfc_id (NFC card) |
 
 **ផ្លូវកាត់៖** អាច run ឯកសារតែមួយ [`../schema.sql`](../schema.sql) ដែលមានគ្រប់តារាងទាំងអស់ក្នុងពេលតែមួយ។
 

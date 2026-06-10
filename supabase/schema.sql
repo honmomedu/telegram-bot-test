@@ -159,3 +159,7 @@ ALTER TABLE manual_hours DROP CONSTRAINT IF EXISTS manual_hours_employee_code_wo
 CREATE UNIQUE INDEX IF NOT EXISTS manual_hours_org_code_date_key ON manual_hours(org_id, employee_code, work_date);
 CREATE INDEX IF NOT EXISTS idx_employees_org ON employees(org_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_org ON attendance(org_id);
+
+-- 009 — Employee NFC card id --------------------------------
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS nfc_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_employees_nfc ON employees(nfc_id);
