@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SecureAttend — មគ្គុទ្ទេសក៍ Build ក្នុង Google AI Studio (វគ្គសិក្សា)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --brand:#4f46e5; --brand2:#8b5cf6; --ink:#0f172a; --muted:#64748b;
+    --bg:#f8fafc; --card:#ffffff; --line:#e2e8f0; --code:#1e1b2e;
+    --grad:linear-gradient(135deg,#4f46e5,#8b5cf6);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Kantumruy Pro','Inter',sans-serif;color:var(--ink);
+    background:var(--bg);line-height:1.75;-webkit-font-smoothing:antialiased}
+  code,pre,.mono{font-family:'Inter',ui-monospace,monospace}
+  a{color:var(--brand);text-decoration:none}
+  .wrap{max-width:980px;margin:0 auto;padding:0 20px}
+
+  /* hero */
+  header.hero{background:var(--grad);color:#fff;padding:54px 0 60px;position:relative;overflow:hidden}
+  header.hero::after{content:"";position:absolute;top:-80px;right:-60px;width:320px;height:320px;background:rgba(255,255,255,.12);border-radius:50%;filter:blur(40px)}
+  .hero .badge{display:inline-block;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.25);
+    padding:6px 14px;border-radius:999px;font-size:13px;font-weight:600;margin-bottom:16px}
+  .hero h1{margin:0 0 8px;font-size:38px;font-weight:700;letter-spacing:-.5px}
+  .hero p{margin:0;font-size:17px;opacity:.92;max-width:680px}
+  .hero .meta{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap}
+  .hero .meta span{background:rgba(255,255,255,.15);padding:6px 12px;border-radius:10px;font-size:13px;font-weight:600}
+
+  /* sections */
+  section{padding:38px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:26px;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+  h2 .n{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;
+    background:var(--grad);color:#fff;font-size:16px;font-weight:700;flex:none}
+  h3{font-size:18px;margin:22px 0 8px;color:var(--brand)}
+  .lead{color:var(--muted);margin:0 0 14px}
+
+  /* toc */
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 24px;margin:26px 0;
+    box-shadow:0 8px 24px -16px rgba(79,70,229,.3)}
+  .toc h4{margin:0 0 12px;font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  .toc ol{margin:0;padding-left:20px;columns:2;column-gap:30px}
+  .toc li{margin:4px 0;break-inside:avoid}
+
+  /* cards / flow */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+    box-shadow:0 4px 16px -12px rgba(15,23,42,.25)}
+  .card .ico{font-size:22px}
+  .card b{display:block;margin:6px 0 4px}
+  .card small{color:var(--muted);font-size:13px;line-height:1.6}
+
+  ul.flow{list-style:none;padding:0;margin:14px 0;counter-reset:f}
+  ul.flow li{position:relative;padding:12px 16px 12px 52px;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;margin:8px 0}
+  ul.flow li::before{counter-increment:f;content:counter(f);position:absolute;left:12px;top:12px;width:28px;height:28px;
+    background:var(--grad);color:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+  ul.flow li b{color:var(--brand)}
+
+  .pill{display:inline-block;background:#eef2ff;color:#4338ca;border-radius:8px;padding:2px 10px;font-size:12px;font-weight:600;margin:2px 4px 2px 0}
+
+  /* prompt module */
+  .module{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0;margin:18px 0;overflow:hidden;
+    box-shadow:0 8px 30px -22px rgba(79,70,229,.5)}
+  .module > .head{background:linear-gradient(135deg,#eef2ff,#f5f3ff);padding:14px 20px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:12px}
+  .module > .head .tag{background:var(--grad);color:#fff;width:30px;height:30px;border-radius:9px;display:flex;
+    align-items:center;justify-content:center;font-weight:700;flex:none}
+  .module > .head b{font-size:16px}
+  .module > .head small{color:var(--muted);display:block;font-weight:500}
+  .module .body{padding:16px 20px}
+  .lng{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 0 4px;display:flex;align-items:center;gap:6px}
+  .lng .flag{font-size:14px}
+  pre{background:var(--code);color:#e2e8f0;border-radius:12px;padding:16px 18px;overflow-x:auto;font-size:13.5px;
+    line-height:1.65;margin:0 0 6px;white-space:pre-wrap;word-break:break-word}
+  pre.km{color:#f1f5f9}
+
+  .note{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:12px;padding:12px 16px;margin:14px 0;font-size:14px}
+  .ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:12px;padding:12px 16px;margin:14px 0;font-size:14px}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;background:var(--card);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line)}
+  th{background:#f1f5f9;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+
+  .steps{counter-reset:s;list-style:none;padding:0}
+  .steps li{position:relative;padding:10px 0 10px 40px;border-bottom:1px dashed var(--line)}
+  .steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:8px;width:26px;height:26px;
+    border:2px solid var(--brand);color:var(--brand);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+
+  footer{padding:30px 0;text-align:center;color:var(--muted);font-size:14px}
+  @media print{header.hero{background:var(--brand)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .module,.card,pre{break-inside:avoid} .toc ol{columns:1}}
+  @media(max-width:640px){.toc ol{columns:1}.hero h1{font-size:30px}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="badge">🛡️ វគ្គសិក្សា · Course Material</div>
+    <h1>SecureAttend — Build ក្នុង Google AI Studio</h1>
+    <p>ប្រព័ន្ធកត់ត្រាវត្តមាន + គ្រប់គ្រងធនធានមនុស្ស (HR/Payroll) ពហុស្ថាប័ន ប្រើ AI ផ្គូលមុខ · GPS · QR · NFC · Telegram។ មគ្គុទ្ទេសក៍នេះមាន <b>Flow សង្ខេប</b> និង <b>Prompt គ្រប់ជំហាន (ខ្មែរ + English)</b> ដើម្បីបង្រៀនសិក្ខាកាម។</p>
+    <div class="meta">
+      <span>Next.js 15</span><span>Supabase</span><span>Tailwind</span><span>Telegram Bot</span>
+      <span>face-api.js</span><span>Vercel</span><span>Multi-tenant</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- TOC -->
+  <div class="toc">
+    <h4>មាតិកា · Contents</h4>
+    <ol>
+      <li><a href="#overview">ទិដ្ឋភាពទូទៅ · Overview</a></li>
+      <li><a href="#stack">បច្ចេកវិទ្យា · Tech Stack</a></li>
+      <li><a href="#flow">Flow ការងារ · System Flow</a></li>
+      <li><a href="#methods">វិធីចុះវត្តមាន ៥ · 5 Methods</a></li>
+      <li><a href="#prompts">Prompts (Module 1–13)</a></li>
+      <li><a href="#schema">Schema Folder</a></li>
+      <li><a href="#github">GitHub</a></li>
+      <li><a href="#vercel">Deploy · Vercel</a></li>
+      <li><a href="#env">Env Variables</a></li>
+      <li><a href="#teach">គន្លឹះបង្រៀន · Teaching Tips</a></li>
+    </ol>
+  </div>
+
+  <!-- OVERVIEW -->
+  <section id="overview">
+    <h2><span class="n">i</span> ទិដ្ឋភាពទូទៅ · Overview</h2>
+    <p class="lead">SecureAttend គឺជា <b>Telegram Mini App + Web App</b> ដែលឱ្យបុគ្គលិកចុះវត្តមានដោយសុវត្ថិភាព ហើយឱ្យស្ថាប័ននីមួយៗ (multi-tenant) គ្រប់គ្រងបុគ្គលិក · ប្រាក់ខែ · របាយការណ៍ដោយឡែកពីគ្នា។</p>
+    <div class="grid">
+      <div class="card"><div class="ico">📍</div><b>Geofence GPS</b><small>ផ្ទៀងផ្ទាត់ទីតាំង (Haversine) ឱ្យចុះវត្តមានតែនៅការិយាល័យ។</small></div>
+      <div class="card"><div class="ico">🧠</div><b>AI ផ្គូលមុខ</b><small>face-api.js ស្គាល់បុគ្គលិកដោយខ្លួនឯង — មនុស្សក្រៅ scan មិនបាន។</small></div>
+      <div class="card"><div class="ico">🪪</div><b>QR / NFC Card</b><small>កាតបុគ្គលិក + Kiosk USB reader សម្រាប់ស្ថានីយ៍។</small></div>
+      <div class="card"><div class="ico">💰</div><b>Payroll</b><small>ប្រាក់ខែថេរ/ម៉ោង · កាត់/ថែម · Payslip តាម Telegram។</small></div>
+      <div class="card"><div class="ico">📨</div><b>Telegram</b><small>ជូនដំណឹងក្រុម + DM ផ្ទាល់ · /link · broadcast។</small></div>
+      <div class="card"><div class="ico">🏢</div><b>Multi-tenant</b><small>Owner បង្កើតស្ថាប័នច្រើន ប្រើដាច់ដោយឡែក (លក់បាន)។</small></div>
+    </div>
+  </section>
+
+  <!-- STACK -->
+  <section id="stack">
+    <h2><span class="n">⚙</span> បច្ចេកវិទ្យា · Tech Stack</h2>
+    <table>
+      <tr><th>ស្រទាប់ · Layer</th><th>បច្ចេកវិទ្យា · Technology</th></tr>
+      <tr><td>Frontend</td><td>Next.js 15 (App Router), React 19, Tailwind CSS v4, motion, lucide-react</td></tr>
+      <tr><td>Khmer Font</td><td>Kantumruy Pro (next/font)</td></tr>
+      <tr><td>AI មុខ · Face AI</td><td>@vladmandic/face-api (models in <span class="mono">/public/models</span>)</td></tr>
+      <tr><td>QR / Excel</td><td>qrcode, @yudiel/react-qr-scanner, xlsx (SheetJS)</td></tr>
+      <tr><td>Map</td><td>leaflet, react-leaflet (OpenStreetMap)</td></tr>
+      <tr><td>Backend</td><td>Next.js API Routes (serverless) + Supabase (Postgres)</td></tr>
+      <tr><td>Bot</td><td>Telegraf (Telegram Bot)</td></tr>
+      <tr><td>Deploy</td><td>GitHub → Vercel (auto-deploy) + Vercel Cron</td></tr>
+    </table>
+  </section>
+
+  <!-- FLOW -->
+  <section id="flow">
+    <h2><span class="n">→</span> Flow ការងារ · System Flow</h2>
+    <p class="lead">ពន្យល់ជាចំណុចៗ ងាយបង្រៀន។ The end-to-end flow, point by point.</p>
+
+    <h3>A. Flow ចុះវត្តមាន (Attendance)</h3>
+    <ul class="flow">
+      <li><b>Owner</b> បង្កើតស្ថាប័ន → ផ្តល់ link <span class="mono">/?org=slug</span> និងពាក្យសម្ងាត់ Admin។</li>
+      <li><b>Admin</b> បង្កើតបុគ្គលិក (Employee ID) · កំណត់ទីតាំង · ជ្រើសវិធីចុះវត្តមាន។</li>
+      <li><b>បុគ្គលិក</b> បើក app → បញ្ចូល Employee ID (activate) → ចុះឈ្មោះមុខ (face)។</li>
+      <li><b>Check-in</b>៖ GPS ត្រូវនៅក្នុងតំបន់ → ផ្ទៀងផ្ទាត់ (មុខ/QR/កាត/NFC)។</li>
+      <li><b>Server</b> កត់ត្រាដោយ <b>server timestamp</b> (ការពារការបន្លំម៉ោង) → ផ្ញើ Telegram (ក្រុម + DM)។</li>
+    </ul>
+
+    <h3>B. Flow អត្តសញ្ញាណ (Identity)</h3>
+    <ul class="flow">
+      <li>គោលគឺ <b>Employee ID</b> (មិនមែន Telegram ID) — ប្តូរ Telegram ក៏មិនបាត់។</li>
+      <li>មុខ៖ AI គណនា <b>descriptor 128</b> → server ផ្គូផ្គងនឹងបុគ្គលិកទាំងអស់ (auto-match)។</li>
+      <li>កាត QR៖ encode <span class="mono">SECATT-EMP:code:token</span> (token មានហត្ថលេខាសម្ងាត់)។</li>
+      <li>NFC៖ serial កាត ↔ បុគ្គលិក (ចុះបញ្ជីមុន)។</li>
+    </ul>
+
+    <h3>C. Flow ប្រាក់ខែ (Payroll)</h3>
+    <ul class="flow">
+      <li>Attendance → គណនា ថ្ងៃ/យឺត/ម៉ោង (តាមម៉ោងកំណត់ Asia/Phnom_Penh)។</li>
+      <li>ប្រាក់ខែ = គោល (ខែ) ឬ rate×ម៉ោង (hourly) + ថែម − កាត់ (adjustments)។</li>
+      <li>Payslip ផ្ញើតាម Telegram — ដោយដៃ ឬ <b>cron</b> ថ្ងៃ payday។</li>
+    </ul>
+
+    <h3>D. Flow Multi-tenant</h3>
+    <ul class="flow">
+      <li>គ្រប់ table មាន <span class="mono">org_id</span>។ org មកពី cookie (<span class="mono">?org=slug</span>)។</li>
+      <li>API នីមួយៗ scope តាម org → ទិន្នន័យស្ថាប័នដាច់ដោយឡែក ១០០%។</li>
+      <li>Config (geofence/payroll/QR) រក្សាក្នុង row <span class="mono">organizations</span> per org។</li>
+    </ul>
+  </section>
+
+  <!-- METHODS -->
+  <section id="methods">
+    <h2><span class="n">5</span> វិធីចុះវត្តមាន ៥ · 5 Methods</h2>
+    <p class="lead">Admin នៃស្ថាប័ននីមួយៗ ជ្រើស (toggle) ថាបើកវិធីណាខ្លះ។</p>
+    <table>
+      <tr><th>#</th><th>វិធី · Method</th><th>ឧបករណ៍ · Device</th></tr>
+      <tr><td>1</td><td>🧠 Face + GPS — ផ្ទៀងផ្ទាត់មុខ AI</td><td>ទូរស័ព្ទ (camera)</td></tr>
+      <tr><td>2</td><td>🏢 Office QR — ស្កេន QR ការិយាល័យ</td><td>ទូរស័ព្ទ</td></tr>
+      <tr><td>3</td><td>🪪 QR Card — ស្កេនកាត QR បុគ្គលិក</td><td>ទូរស័ព្ទ / Kiosk</td></tr>
+      <tr><td>4</td><td>📡 NFC Card — ប៉ះកាត</td><td>Android / USB reader (Kiosk)</td></tr>
+      <tr><td>5</td><td>🤝 Manual / Proxy — ចុះជំនួស (ភ្លេចទូរស័ព្ទ)</td><td>Admin / ផ្ទាំងគ្រប់គ្រង</td></tr>
+    </table>
+    <div class="note">📡 <b>NFC</b>៖ Web NFC ដំណើរការតែលើ <b>Chrome (Android)</b>។ សម្រាប់កុំព្យូទ័រ ប្រើ <b>USB reader → /kiosk</b> (reader វាយលេខកាតដូច keyboard — ដំណើរការគ្រប់ browser)។</div>
+  </section>
+
+  <!-- PROMPTS -->
+  <section id="prompts">
+    <h2><span class="n">▶</span> Prompts ដើម្បី Build (Module 1–13)</h2>
+    <p class="lead">ប្រើ <b>Google AI Studio → Build</b>។ ចាប់ផ្ដើមដោយ Master Prompt រួច copy module នីមួយៗតាមលំដាប់។ Use the Master Prompt first, then each module in order.</p>
+
+    <!-- MASTER -->
+    <div class="module">
+      <div class="head"><div class="tag">0</div><div><b>Master Prompt — បរិបទគម្រោង · Project Context</b><small>ដាក់នៅដើមគេ ដើម្បីឱ្យ AI យល់គម្រោងទាំងមូល</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">សាងសង់ Web App មួយឈ្មោះ "SecureAttend" — ប្រព័ន្ធកត់ត្រាវត្តមាន និងគ្រប់គ្រងធនធានមនុស្ស ពហុស្ថាប័ន (multi-tenant)។
+ប្រើ៖ Next.js 15 (App Router, TypeScript), Tailwind CSS v4, Supabase (Postgres), Telegram Bot (Telegraf)។
+ផ្ទៃខាងមុខជាភាសាខ្មែរ ប្រើ font Kantumruy Pro, រចនាបថ premium ពណ៌ gradient ស្វាយ-ខៀវ (indigo→violet)។
+គោលដៅ៖ លក់ឱ្យស្ថាប័នផ្សេងៗ (សាលា/ក្រុមហ៊ុន) ប្រើ។ បុគ្គលិកចុះវត្តមានដោយ GPS geofence, ផ្គូលមុខ AI, QR, NFC។
+រាល់ API រក្សាទុកក្នុង Supabase ហើយ deploy លើ Vercel។ សូមរៀបចំ schema.sql ក្នុង folder supabase/។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Build a web app called "SecureAttend" — a multi-tenant employee attendance + HR/payroll system.
+Stack: Next.js 15 (App Router, TypeScript), Tailwind CSS v4, Supabase (Postgres), Telegram Bot (Telegraf).
+UI in Khmer using the Kantumruy Pro font, premium design with an indigo→violet gradient.
+Goal: sell to multiple institutions (schools/companies). Employees check in via GPS geofence, AI face match, QR, and NFC.
+All APIs persist to Supabase; deploy on Vercel. Keep the database schema.sql inside a supabase/ folder.</pre>
+      </div>
+    </div>
+
+    <!-- M1 -->
+    <div class="module">
+      <div class="head"><div class="tag">1</div><div><b>គ្រឹះ + Branding · Foundation</b><small>Next.js init, Tailwind, Khmer font, ទំព័រដើម</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បង្កើតគម្រោង Next.js 15 ដំបូង។ ដាក់ font Kantumruy Pro តាម next/font។ កំណត់ metadata ឈ្មោះ "SecureAttend"។
+បង្កើតទំព័រដើម (app/page.tsx) មាន៖ header gradient មាន logo, នាឡិកា real-time, និងផ្ទាំងបង្ហាញ "សួស្តី" ឈ្មោះម្ចាស់គណនី។
+ដាក់ design tokens (ពណ៌ brand, gradient, shadow) ក្នុង globals.css។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Initialize a Next.js 15 project. Load the Kantumruy Pro font via next/font. Set metadata title "SecureAttend".
+Build the home page (app/page.tsx): a gradient header with a logo, a real-time clock, and a greeting hero showing the account owner's name.
+Add design tokens (brand colors, gradient, shadows) in globals.css.</pre>
+      </div>
+    </div>
+
+    <!-- M2 -->
+    <div class="module">
+      <div class="head"><div class="tag">2</div><div><b>GPS Geofence + ផែនទី · Map</b><small>ទីតាំង, Haversine, radius, Leaflet</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បន្ថែមមុខងារ GPS៖ ទាញទីតាំងបុគ្គលិក (navigator.geolocation), គណនាចម្ងាយទៅការិយាល័យដោយ Haversine formula។
+បង្ហាញ "ស្ថិតក្នុងតំបន់អនុញ្ញាត / នៅឆ្ងាយ" តាម radius។ ដាក់ផែនទី Leaflet (OpenStreetMap) បង្ហាញទីតាំង + រង្វង់ radius។
+ប៊ូតុង "ចូលធ្វើការ (IN)" និង "ចេញធ្វើការ (OUT)" disabled បើនៅក្រៅតំបន់។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Add GPS: read the user's location (navigator.geolocation), compute distance to the office using the Haversine formula.
+Show "within allowed zone / too far" based on a radius. Add a Leaflet map (OpenStreetMap) with the office marker + radius circle.
+"Check IN" and "Check OUT" buttons are disabled when outside the zone.</pre>
+      </div>
+    </div>
+
+    <!-- M3 -->
+    <div class="module">
+      <div class="head"><div class="tag">3</div><div><b>AI ផ្គូលមុខ · Face Recognition</b><small>face-api.js, enroll, auto-match</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បន្ថែម AI ផ្គូលមុខ ដោយ @vladmandic/face-api។ Copy models ទៅ /public/models។
+បង្កើត Modal "ចុះឈ្មោះមុខ"៖ បើក camera មុខ, គណនា face descriptor (128), រក្សាទុក localStorage + Supabase (table face_enrollments)។
+ពេល check-in ដោយ Selfie៖ ថតមុខ → server ផ្គូផ្គងនឹងបុគ្គលិកទាំងអស់ (auto-match, threshold 0.5)។ បើមិនត្រូវ → submit មិនបាន។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Add AI face recognition with @vladmandic/face-api. Copy the models into /public/models.
+Build a "Face Registration" modal: open the front camera, compute a 128-d face descriptor, store in localStorage + Supabase (face_enrollments).
+On selfie check-in: capture face → server auto-matches against all enrolled employees (threshold 0.5). If no match, block submit.</pre>
+      </div>
+    </div>
+
+    <!-- M4 -->
+    <div class="module">
+      <div class="head"><div class="tag">4</div><div><b>Office QR · QR Generator + Scan</b><small>admin generate, scan, validate</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បន្ថែម Office QR៖ Admin បង្កើត QR ការិយាល័យ (lib qrcode), ទាញយក PNG / ព្រីន / regenerate (secret ចៃដន្យ)។
+ផ្ទៃបុគ្គលិក៖ scanner (@yudiel/react-qr-scanner) ស្កេន → server validate secret → កត់ត្រាវត្តមាន។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Add Office QR: admin generates an office QR (qrcode lib), download PNG / print / regenerate (random secret).
+On the employee side: a scanner (@yudiel/react-qr-scanner) reads it → server validates the secret → records attendance.</pre>
+      </div>
+    </div>
+
+    <!-- M5 -->
+    <div class="module">
+      <div class="head"><div class="tag">5</div><div><b>អត្តសញ្ញាណបុគ្គលិក · Employee Identity</b><small>employees table, activate by Employee ID</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បង្កើត table employees (code unique, name, department, telegram_id, active)។ Attendance កត់តាម employee_code + server timestamp។
+ផ្ទៃបុគ្គលិក៖ ផ្ទាំង "ភ្ជាប់គណនី" បញ្ចូល Employee ID → activate (រក្សា localStorage)។ បន្ទាប់ទើបឱ្យចុះឈ្មោះមុខ និងចុះវត្តមាន។
+Face auto-match identify ត្រឡប់ employee → កត់ត្រាឱ្យបុគ្គលិកនោះ។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Create an employees table (unique code, name, department, telegram_id, active). Attendance keyed by employee_code + server timestamp.
+Employee side: an "Activate" screen to enter the Employee ID → activate (store in localStorage). Then allow face enrollment and check-in.
+Face auto-match returns the employee → record attendance for them.</pre>
+      </div>
+    </div>
+
+    <!-- M6 -->
+    <div class="module">
+      <div class="head"><div class="tag">6</div><div><b>Telegram Bot + ជូនដំណឹង · Notifications</b><small>webhook, /link, group + DM</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បង្កើត Telegram Bot (Telegraf) ជា webhook (app/api/bot)។ ពាក្យបញ្ជា /start បើក Mini App, /link &lt;EmployeeID&gt; ភ្ជាប់ telegram_id។
+ពេលចុះវត្តមាន ផ្ញើ ២ កន្លែង៖ ក្រុម Admin និង DM ផ្ទាល់ទៅបុគ្គលិក (បើភ្ជាប់)។ Auto-link telegram_id ពេលបើក app ក្នុង Telegram។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Create a Telegram Bot (Telegraf) as a webhook (app/api/bot). /start opens the Mini App, /link &lt;EmployeeID&gt; binds telegram_id.
+On check-in send to two places: the admin group AND a private DM to the employee (if linked). Auto-link telegram_id when the app opens inside Telegram.</pre>
+      </div>
+    </div>
+
+    <!-- M7 -->
+    <div class="module">
+      <div class="head"><div class="tag">7</div><div><b>ផ្ទាំង Admin + Login · Dashboard</b><small>sidebar, password login, system settings</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បង្កើតផ្ទាំង Admin (app/admin) មាន sidebar tabs៖ បុគ្គលិក, QR, Telegram, ប្រព័ន្ធ។ Login ដោយ password (sessionStorage)។
+Tab ប្រព័ន្ធ៖ កំណត់ទីតាំងការិយាល័យ (paste Google Maps / coords / GPS បច្ចុប្បន្ន) + radius។ គ្រប់គ្រងបុគ្គលិក (CRUD)។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Build an Admin dashboard (app/admin) with sidebar tabs: Employees, QR, Telegram, System. Password login (sessionStorage).
+System tab: set office location (paste Google Maps link / coords / current GPS) + radius. Employee management (CRUD).</pre>
+      </div>
+    </div>
+
+    <!-- M8 -->
+    <div class="module">
+      <div class="head"><div class="tag">8</div><div><b>របាយការណ៍ + ប្រាក់ខែ · Reports & Payroll</b><small>monthly report, salary, adjustments, payslip cron</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បន្ថែម tab របាយការណ៍វត្តមានប្រចាំខែ (ថ្ងៃ/យឺត/ម៉ោង, Export CSV) និង tab ប្រាក់ខែ។
+ប្រាក់ខែ៖ ប្រភេទថេរ(ខែ) ឬ គិតម៉ោង per employee; យឺត/អវត្តមាន auto តាមម៉ោងកំណត់ (Asia/Phnom_Penh); ថែម/កាត់ (adjustments)។
+Payslip ផ្ញើ Telegram — ដោយដៃ ឬ cron ថ្ងៃ payday (vercel.json)។ គ្រប់ query paginate ($.range) ដើម្បីកុំជាប់ 1000-row។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Add a monthly attendance report tab (days/late/hours, CSV export) and a payroll tab.
+Payroll: fixed-monthly OR hourly per employee; auto late/absent from work-hour settings (Asia/Phnom_Penh); add/deduct adjustments.
+Send payslips via Telegram — manually or by a payday cron (vercel.json). Paginate every query (.range) to avoid the 1000-row cap.</pre>
+      </div>
+    </div>
+
+    <!-- M9 -->
+    <div class="module">
+      <div class="head"><div class="tag">9</div><div><b>ជំនួស + Timesheet + Excel</b><small>substitute, part-time manual hours, import</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បន្ថែម៖ (1) ការជំនួស — ពេល check-in ជ្រើស "ជំនួសឱ្យ X"; អ្នកធ្វើពិតទទួលប្រាក់, កត់ substitute_for។
+(2) Timesheet — Admin បញ្ចូលម៉ោងតាមថ្ងៃសម្រាប់ part-time + កាលវិភាគប្រចាំសប្តាហ៍។
+(3) Excel import — upload .xlsx (SheetJS) បញ្ចូលបុគ្គលិក + ប្រាក់ច្រើនម្ដង, មាន template។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Add: (1) Substitution — at check-in pick "covering for X"; the real worker is paid, store substitute_for.
+(2) Timesheet — admin enters per-day hours for part-timers + a weekly schedule.
+(3) Excel import — upload .xlsx (SheetJS) to bulk add employees + pay, with a template.</pre>
+      </div>
+    </div>
+
+    <!-- M10 -->
+    <div class="module">
+      <div class="head"><div class="tag">10</div><div><b>Multi-tenant + Owner</b><small>organizations, org_id scoping, /owner</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">ធ្វើ multi-tenant ដោយ "shared DB + org_id"។ បង្កើត table organizations (slug, name, admin_password, geofence/payroll/qr_secret JSONB, attendance_methods JSONB)។
+បន្ថែម org_id លើគ្រប់ table; ទិន្នន័យចាស់ → org "default"។ org មកពី cookie (?org=slug)។ រាល់ API scope តាម org_id។
+បង្កើតផ្ទាំង /owner (OWNER_PASSWORD) គ្រប់គ្រងស្ថាប័ន៖ បង្កើត/កែ, កំណត់ admin password, toggle វិធីចុះវត្តមាន ៥, copy link app/admin។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Make it multi-tenant via "shared DB + org_id". Create an organizations table (slug, name, admin_password, geofence/payroll/qr_secret JSONB, attendance_methods JSONB).
+Add org_id to every table; existing data → the "default" org. Org comes from a cookie (?org=slug). Scope every API by org_id.
+Build an /owner panel (OWNER_PASSWORD) to manage orgs: create/edit, set admin password, toggle the 5 attendance methods, copy app/admin links.</pre>
+      </div>
+    </div>
+
+    <!-- M11 -->
+    <div class="module">
+      <div class="head"><div class="tag">11</div><div><b>កាត QR / NFC · Employee Cards</b><small>printable QR cards, signed token, NFC register</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បន្ថែម tab "កាតបុគ្គលិក"៖ បង្កើតកាត QR ឱ្យបុគ្គលិកម្នាក់ៗ (រូប+ឈ្មោះ+លេខ+QR), ព្រីនទាំងអស់។
+QR encode "SECATT-EMP:code:token" ដែល token ជាហត្ថលេខាសម្ងាត់ (sha256 ជាមួយ org secret) — ការពារក្លែងបន្លំ។
+ចុះ NFC៖ ភ្ជាប់ serial កាតទៅបុគ្គលិក (Web NFC ទូរស័ព្ទ ឬ USB reader)។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Add a "Employee Cards" tab: generate a QR ID card per employee (photo+name+code+QR), print all.
+The QR encodes "SECATT-EMP:code:token" where token is a signature (sha256 with the org secret) — prevents forgery.
+NFC registration: bind a card serial to an employee (phone Web NFC or a USB reader).</pre>
+      </div>
+    </div>
+
+    <!-- M12 -->
+    <div class="module">
+      <div class="head"><div class="tag">12</div><div><b>Kiosk + USB Reader</b><small>full-screen station, HID reader, auto IN/OUT</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បង្កើតទំព័រ /kiosk ពេញអេក្រង់សម្រាប់កុំព្យូទ័រដែលភ្ជាប់ USB NFC/RFID reader (ប្រភេទ HID — វាយលេខកាតដូច keyboard)។
+មាន input focus ស្វ័យប្រវត្តិចាប់លេខកាត → /api/attendance/kiosk → ស្គាល់បុគ្គលិក → mode ស្វ័យប្រវត្តិ (ចូល/ចេញ toggle តាមកំណត់ត្រាចុងក្រោយ) → បង្ហាញ feedback ធំ → reset។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Build a full-screen /kiosk page for a computer with a USB NFC/RFID reader (HID type — types the card id like a keyboard).
+A permanently-focused input captures the card id → /api/attendance/kiosk → identify employee → auto mode (toggle IN/OUT from the last record) → big feedback → reset.</pre>
+      </div>
+    </div>
+
+    <!-- M13 -->
+    <div class="module">
+      <div class="head"><div class="tag">13</div><div><b>Manual / Proxy</b><small>admin marks attendance (forgot phone)</small></div></div>
+      <div class="body">
+        <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
+        <pre class="km">បន្ថែមវិធីទី៥៖ Manual/Proxy។ ក្នុងផ្ទាំង Admin (ឬ kiosk), ជ្រើសបុគ្គលិក + ចូល/ចេញ → កត់ត្រាដោយដៃ (method=manual) ករណីភ្លេចទូរស័ព្ទ។ ផ្ញើ Telegram ដូចគ្នា។</pre>
+        <div class="lng"><span class="flag">🇬🇧</span> English</div>
+        <pre>Add the 5th method: Manual/Proxy. In the admin panel (or kiosk), pick an employee + IN/OUT → record manually (method=manual) for the "forgot phone" case. Send Telegram as usual.</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCHEMA -->
+  <section id="schema">
+    <h2><span class="n">🗄</span> Schema Folder</h2>
+    <p class="lead">សុំ AI Studio រៀបចំ SQL ជា migrations មានលំដាប់ + ឯកសារ schema.sql តែមួយ (idempotent)។</p>
+    <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ / 🇬🇧 English</div>
+    <pre class="km">រៀបចំ database ក្នុង folder supabase/ ដូចនេះ៖
+supabase/
+ ├─ schema.sql                  (full schema, idempotent, run ១ ដងបាន)
+ └─ migrations/
+     ├─ 001_initial.sql         telegram_users, broadcast_history
+     ├─ 002_system_settings.sql office geofence
+     ├─ 003_face_and_qr.sql     face_enrollments, qr_codes
+     ├─ 004_employees_attendance.sql
+     ├─ 005_payroll.sql         payroll_settings, payroll_adjustments
+     ├─ 006_substitute_manual_hours.sql
+     ├─ 007_work_schedule.sql
+     ├─ 008_organizations.sql   multi-tenant + org_id
+     └─ 009_employee_cards.sql  nfc_id
+
+Make all CREATE TABLE use "IF NOT EXISTS" so they are safe to re-run.</pre>
+    <div class="ok">✅ ប្រើ៖ បើក <b>Supabase → SQL Editor</b> → copy <span class="mono">schema.sql</span> ទាំងមូល → Run (បង្កើតគ្រប់ table)។</div>
+  </section>
+
+  <!-- GITHUB -->
+  <section id="github">
+    <h2><span class="n">🐙</span> ដាក់កូដលើ GitHub</h2>
+    <ol class="steps">
+      <li>ក្នុង Google AI Studio → ចុច <b>Export / Download code</b> (ឬ "Open in GitHub")។</li>
+      <li>បង្កើត repo ថ្មីលើ GitHub (ឧ. <span class="mono">secure-attend</span>)។</li>
+      <li>បញ្ជា Git (terminal)៖</li>
+    </ol>
+    <pre>git init
+git add -A
+git commit -m "feat: SecureAttend initial"
+git branch -M main
+git remote add origin https://github.com/&lt;username&gt;/secure-attend.git
+git push -u origin main</pre>
+    <div class="note">⚠️ កុំ push file <span class="mono">.env</span> (មាន .gitignore ដាក់ <span class="mono">.env*</span>)។ ត្រូវ commit <span class="mono">/public/models</span> (models AI ~6MB) ដើម្បីឱ្យ Face ដំណើរការលើ Vercel។</div>
+  </section>
+
+  <!-- VERCEL -->
+  <section id="vercel">
+    <h2><span class="n">▲</span> Deploy លើ Vercel</h2>
+    <ol class="steps">
+      <li>ចូល <a href="https://vercel.com">vercel.com</a> → <b>Add New → Project</b> → Import repo ពី GitHub។</li>
+      <li>Framework auto = Next.js។ ចុច <b>Deploy</b>។</li>
+      <li>ដាក់ <b>Environment Variables</b> (មើលតារាងខាងក្រោម) → <b>Redeploy</b>។</li>
+      <li>កំណត់ Telegram webhook ទៅ <span class="mono">https://&lt;app&gt;.vercel.app/api/bot</span>។</li>
+      <li>Run <span class="mono">schema.sql</span> លើ Supabase។ រួចរាល់! Push ថ្មីៗ → auto-deploy។</li>
+    </ol>
+    <div class="ok">⏱️ <b>Vercel Cron</b> (payslip)៖ ដាក់ <span class="mono">vercel.json</span> មាន cron <span class="mono">/api/cron/payday</span> (Hobby plan = ១ ដង/ថ្ងៃ)។</div>
+  </section>
+
+  <!-- ENV -->
+  <section id="env">
+    <h2><span class="n">🔑</span> Environment Variables</h2>
+    <table>
+      <tr><th>Variable</th><th>ការប្រើ · Purpose</th></tr>
+      <tr><td class="mono">NEXT_PUBLIC_SUPABASE_URL</td><td>Supabase project URL</td></tr>
+      <tr><td class="mono">SUPABASE_SERVICE_ROLE_KEY</td><td>Supabase service key (server, bypass RLS)</td></tr>
+      <tr><td class="mono">TELEGRAM_BOT_TOKEN</td><td>Token ពី BotFather</td></tr>
+      <tr><td class="mono">TELEGRAM_ADMIN_CHAT_ID</td><td>Group ID សម្រាប់ជូនដំណឹង</td></tr>
+      <tr><td class="mono">ADMIN_PASSWORD</td><td>ពាក្យសម្ងាត់ Admin (org default)</td></tr>
+      <tr><td class="mono">OWNER_PASSWORD</td><td>ពាក្យសម្ងាត់ Owner (គ្រប់គ្រងស្ថាប័ន)</td></tr>
+      <tr><td class="mono">CRON_SECRET</td><td>(ស្រេចចិត្ត) ការពារ cron endpoint</td></tr>
+    </table>
+  </section>
+
+  <!-- TEACH -->
+  <section id="teach">
+    <h2><span class="n">🎓</span> គន្លឹះបង្រៀន · Teaching Tips</h2>
+    <ul class="flow">
+      <li><b>បង្រៀនតាម Module</b>៖ មួយ module = មួយ session។ ឱ្យសិក្ខាកាម copy prompt → មើលលទ្ធផល → ពន្យល់កូដ។</li>
+      <li><b>ចាប់ផ្ដើមពី Flow</b>៖ គូរ flow (បុគ្គលិក → API → Supabase → Telegram) លើក្ដារខៀនមុន code។</li>
+      <li><b>បញ្ជាក់ "ហេតុអ្វី"</b>៖ ឧ. ហេតុអ្វី server timestamp (ការពារបន្លំម៉ោង), ហេតុអ្វី org_id (ការពារទិន្នន័យលាយ)។</li>
+      <li><b>Demo ជាក់ស្ដែង</b>៖ ឱ្យសិក្ខាកាមចុះវត្តមានពិត (face/QR/NFC) → មើល Telegram notification ភ្លាមៗ។</li>
+      <li><b>លំហាត់</b>៖ ឱ្យសិក្ខាកាមបន្ថែមមុខងារ ១ (ឧ. PDF payslip, charts) ដោយ prompt ផ្ទាល់ខ្លួន។</li>
+    </ul>
+    <div class="note">💡 ស្នើ៖ ឱ្យសិក្ខាកាមម្នាក់ៗបង្កើត org ផ្ទាល់ខ្លួនក្នុង /owner → សាក multi-tenant ឱ្យឃើញទិន្នន័យដាច់ដោយឡែក។</div>
+  </section>
+
+  <footer>
+    🛡️ <b>SecureAttend</b> — Course Build Guide · បង្កើតសម្រាប់វគ្គបណ្ដុះបណ្ដាល<br/>
+    Next.js · Supabase · Telegram · Vercel — © 2026
+  </footer>
+
+</div>
+</body>
+</html>
