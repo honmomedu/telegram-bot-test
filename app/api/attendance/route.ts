@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { orgIdFromReq } from '@/lib/org';
 
 // Record an attendance event (server-side timestamp = anti-cheat) and notify
 // both the admin group AND the employee's private Telegram (if linked).
@@ -25,6 +26,7 @@ async function sendTelegram(chatId: string | number, text: string) {
 
 export async function POST(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const body = await req.json();
     const code = (body.code || '').toString().trim();
     const type = body.type === 'OUT' ? 'OUT' : 'IN';
@@ -42,7 +44,9 @@ export async function POST(req: Request) {
     let substituteName: string | null = null;
     if (substituteFor) {
       try {
-        const { data: sub } = await supabase.from('employees').select('name').eq('code', substituteFor).single();
+        let sq = supabase.from('employees').select('name').eq('code', substituteFor);
+        if (orgId) sq = sq.eq('org_id', orgId);
+        const { data: sub } = await sq.single();
         substituteName = sub?.name || substituteFor;
       } catch { substituteName = substituteFor; }
     }
@@ -51,11 +55,12 @@ export async function POST(req: Request) {
     let name = (body.name || '').toString();
     let telegramId: number | null = null;
     try {
-      const { data: emp } = await supabase
+      let eq = supabase
         .from('employees')
         .select('name, telegram_id, active')
-        .eq('code', code)
-        .single();
+        .eq('code', code);
+      if (orgId) eq = eq.eq('org_id', orgId);
+      const { data: emp } = await eq.single();
       if (emp) {
         if (emp.active === false) {
           return NextResponse.json({ success: false, error: 'Employee inactive' }, { status: 403 });
@@ -72,7 +77,7 @@ export async function POST(req: Request) {
     try {
       const { data, error } = await supabase
         .from('attendance')
-        .insert({ employee_code: code, employee_name: name, type, method, distance, confidence, substitute_for: substituteFor })
+        .insert({ employee_code: code, employee_name: name, type, method, distance, confidence, substitute_for: substituteFor, org_id: orgId })
         .select('created_at')
         .single();
       if (!error && data?.created_at) savedAt = data.created_at;
@@ -115,6 +120,7 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const url = new URL(req.url);
     const limit = Math.min(Number(url.searchParams.get('limit') || 50), 200);
     const code = url.searchParams.get('code');
@@ -124,6 +130,7 @@ export async function GET(req: Request) {
       .select('id, employee_code, employee_name, type, method, distance, confidence, created_at')
       .order('created_at', { ascending: false })
       .limit(limit);
+    if (orgId) q = q.eq('org_id', orgId);
     if (code) q = q.eq('employee_code', code);
 
     const { data, error } = await q;

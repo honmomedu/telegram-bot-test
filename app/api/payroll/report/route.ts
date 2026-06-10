@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { buildPayrollReport } from '@/lib/payrollServer';
 import { currentMonth } from '@/lib/payroll';
+import { orgIdFromReq } from '@/lib/org';
 
 // GET ?month=YYYY-MM -> per-employee attendance summary + computed salary
 export async function GET(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const month = new URL(req.url).searchParams.get('month') || currentMonth();
-    const { rows, settings } = await buildPayrollReport(month);
+    const { rows, settings } = await buildPayrollReport(month, orgId);
 
     const data = rows.map(({ emp, report, salary }) => ({
       code: emp.code,

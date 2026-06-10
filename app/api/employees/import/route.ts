@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { orgIdFromReq } from '@/lib/org';
 
 // Bulk import / update employees from a parsed spreadsheet.
 // POST { rows: [{ code, name, department?, pay_type?, base_salary?, hourly_rate? }] }
 // Upserts by `code` (creates new, updates existing).
 export async function POST(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const body = await req.json();
     const rows: any[] = Array.isArray(body.rows) ? body.rows : [];
     if (rows.length === 0) {
@@ -29,12 +31,12 @@ export async function POST(req: Request) {
 
     // De-duplicate by code (last wins)
     const byCode = new Map<string, any>();
-    for (const r of clean) byCode.set(r.code, r);
+    for (const r of clean) byCode.set(r.code, { ...r, org_id: orgId });
     const finalRows = [...byCode.values()];
 
     const { data, error } = await supabase
       .from('employees')
-      .upsert(finalRows, { onConflict: 'code' })
+      .upsert(finalRows, { onConflict: 'org_id,code' })
       .select('code');
 
     if (error) {

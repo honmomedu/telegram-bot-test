@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { orgIdFromReq } from '@/lib/org';
 
-// CRUD for employees. Employee `code` is the stable identity (not Telegram id).
-// Falls back to an in-memory list when the `employees` table is absent.
+// CRUD for employees, scoped to the current organization (org cookie).
+// `code` is unique per org. Falls back to in-memory when tables are absent.
 
 interface Employee {
   id?: string;
@@ -17,16 +18,16 @@ interface Employee {
 
 let memEmployees: Employee[] = [];
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const { data, error } = await supabase
+    const orgId = await orgIdFromReq(req);
+    let q = supabase
       .from('employees')
       .select('id, code, name, department, telegram_id, active, enrolled, created_at')
       .order('created_at', { ascending: false });
-
-    if (error) {
-      return NextResponse.json({ success: true, employees: memEmployees, _fallback: true });
-    }
+    if (orgId) q = q.eq('org_id', orgId);
+    const { data, error } = await q;
+    if (error) return NextResponse.json({ success: true, employees: memEmployees, _fallback: true });
     return NextResponse.json({ success: true, employees: data });
   } catch (e: any) {
     return NextResponse.json({ success: true, employees: memEmployees, _fallback: true });
@@ -35,6 +36,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const body = await req.json();
     const code = (body.code || '').toString().trim();
     const name = (body.name || '').toString().trim();
@@ -46,7 +48,7 @@ export async function POST(req: Request) {
 
     const { data, error } = await supabase
       .from('employees')
-      .insert({ code, name, department, active: true, enrolled: false })
+      .insert({ code, name, department, org_id: orgId, active: true, enrolled: false })
       .select()
       .single();
 
@@ -54,7 +56,6 @@ export async function POST(req: Request) {
       if (error.code === '23505') {
         return NextResponse.json({ success: false, error: 'Employee ID នេះមានរួចហើយ' }, { status: 409 });
       }
-      // table missing -> memory fallback
       if (memEmployees.some((e) => e.code === code)) {
         return NextResponse.json({ success: false, error: 'Employee ID នេះមានរួចហើយ' }, { status: 409 });
       }
@@ -69,9 +70,10 @@ export async function POST(req: Request) {
   }
 }
 
-// PATCH { code, ...fields } -> update an employee (salary, name, dept, active)
+// PATCH { code, ...fields } -> update an employee within the org
 export async function PATCH(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const b = await req.json();
     const code = (b.code || '').toString().trim();
     if (!code) return NextResponse.json({ success: false, error: 'Missing code' }, { status: 400 });
@@ -89,7 +91,9 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ success: false, error: 'No fields to update' }, { status: 400 });
     }
 
-    const { data, error } = await supabase.from('employees').update(patch).eq('code', code).select().single();
+    let q = supabase.from('employees').update(patch).eq('code', code);
+    if (orgId) q = q.eq('org_id', orgId);
+    const { data, error } = await q.select().single();
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     return NextResponse.json({ success: true, employee: data });
   } catch (e: any) {
@@ -99,15 +103,20 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const code = new URL(req.url).searchParams.get('code');
     if (!code) return NextResponse.json({ success: false, error: 'Missing code' }, { status: 400 });
 
-    const { error } = await supabase.from('employees').delete().eq('code', code);
-    if (error) {
-      memEmployees = memEmployees.filter((e) => e.code !== code);
-    }
-    // also remove their face enrollment
-    await supabase.from('face_enrollments').delete().eq('user_id', code).then(() => {}, () => {});
+    let dq = supabase.from('employees').delete().eq('code', code);
+    if (orgId) dq = dq.eq('org_id', orgId);
+    const { error } = await dq;
+    if (error) memEmployees = memEmployees.filter((e) => e.code !== code);
+
+    // also remove their face enrollment (same org)
+    let fq = supabase.from('face_enrollments').delete().eq('user_id', code);
+    if (orgId) fq = fq.eq('org_id', orgId);
+    await fq.then(() => {}, () => {});
+
     return NextResponse.json({ success: true });
   } catch (e: any) {
     return NextResponse.json({ success: false, error: e?.message }, { status: 500 });

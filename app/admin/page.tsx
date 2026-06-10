@@ -7,6 +7,8 @@ import dynamic from 'next/dynamic';
 const QrGenerator = dynamic(() => import('../../components/QrGenerator'), { ssr: false });
 const ReportsPanel = dynamic(() => import('../../components/ReportsPanel'), { ssr: false });
 const PayrollPanel = dynamic(() => import('../../components/PayrollPanel'), { ssr: false });
+import { initOrgContext, getOrgSlug } from '@/lib/orgClient';
+
 const ImportEmployeesModal = dynamic(() => import('../../components/ImportEmployeesModal'), { ssr: false });
 
 interface Employee {
@@ -66,11 +68,11 @@ export default function AdminDashboard() {
       const res = await fetch('/api/verify-admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, org: getOrgSlug() }),
       });
       const data = await res.json();
       if (data.isAdmin) {
-        sessionStorage.setItem('secure_attend_admin', '1');
+        sessionStorage.setItem('secure_attend_admin', getOrgSlug());
         setIsAdmin(true);
       } else {
         setLoginError(data.message || 'ពាក្យសម្ងាត់មិនត្រឹមត្រូវ។');
@@ -158,6 +160,9 @@ export default function AdminDashboard() {
     `${e.code} ${e.name} ${e.department || ''}`.toLowerCase().includes(search.toLowerCase()),
   );
 
+  // Establish org context (from ?org= / localStorage) before anything else
+  useEffect(() => { initOrgContext(); }, []);
+
   // Load saved office coordinates (runs regardless of how admin authed)
   useEffect(() => {
      fetch('/api/office-config').then(res => res.json()).then(data => {
@@ -168,8 +173,8 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-     // Returning admin (already logged in this session)
-     if (typeof window !== 'undefined' && sessionStorage.getItem('secure_attend_admin') === '1') {
+     // Returning admin (already logged in this session for THIS org)
+     if (typeof window !== 'undefined' && sessionStorage.getItem('secure_attend_admin') === getOrgSlug()) {
          setIsAdmin(true);
          return;
      }

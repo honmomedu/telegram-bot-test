@@ -2,13 +2,15 @@ import { NextResponse } from 'next/server';
 import { buildPayrollReport, PayrollRow } from '@/lib/payrollServer';
 import { currentMonth, formatPayslip } from '@/lib/payroll';
 import { sendTelegram } from '@/lib/telegram';
+import { orgIdFromReq } from '@/lib/org';
 
 // POST { month?, code?, sendAll? } -> send payslip(s) via Telegram DM
 export async function POST(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const body = await req.json().catch(() => ({}));
     const month = body.month || currentMonth();
-    const { rows, settings } = await buildPayrollReport(month);
+    const { rows, settings } = await buildPayrollReport(month, orgId);
 
     let targets: PayrollRow[];
     if (body.sendAll) {

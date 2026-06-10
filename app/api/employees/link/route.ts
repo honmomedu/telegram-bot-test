@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { orgIdFromReq } from '@/lib/org';
 
 // Link a Telegram account to an employee so they receive private DM
 // notifications. Called automatically when the app runs inside the
@@ -15,10 +16,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Missing code or telegramId' }, { status: 400 });
     }
 
-    const { error } = await supabase
-      .from('employees')
-      .update({ telegram_id: tg })
-      .eq('code', c);
+    const orgId = await orgIdFromReq(req);
+    let uq = supabase.from('employees').update({ telegram_id: tg }).eq('code', c);
+    if (orgId) uq = uq.eq('org_id', orgId);
+    const { error } = await uq;
 
     if (error) {
       return NextResponse.json({ success: false, error: error.message });

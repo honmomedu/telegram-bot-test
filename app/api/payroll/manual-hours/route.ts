@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { orgIdFromReq } from '@/lib/org';
 
 // Manual timesheet hours per day (for part-timers / corrections).
 // GET ?month=YYYY-MM&code=EMP  -> entries
@@ -11,10 +12,12 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const month = url.searchParams.get('month');
     const code = url.searchParams.get('code');
+    const orgId = await orgIdFromReq(req);
     let q = supabase
       .from('manual_hours')
       .select('id, employee_code, work_date, hours, note')
       .order('work_date', { ascending: true });
+    if (orgId) q = q.eq('org_id', orgId);
     if (code) q = q.eq('employee_code', code);
     if (month) q = q.like('work_date', `${month}-%`);
     const { data, error } = await q;
@@ -27,6 +30,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const b = await req.json();
     const employee_code = (b.employee_code || '').toString().trim();
     const work_date = (b.work_date || '').toString().trim();
@@ -36,7 +40,7 @@ export async function POST(req: Request) {
     }
     const { data, error } = await supabase
       .from('manual_hours')
-      .upsert({ employee_code, work_date, hours, note: b.note || null }, { onConflict: 'employee_code,work_date' })
+      .upsert({ employee_code, work_date, hours, note: b.note || null, org_id: orgId }, { onConflict: 'org_id,employee_code,work_date' })
       .select()
       .single();
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });

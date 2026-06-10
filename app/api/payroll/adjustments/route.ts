@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { orgIdFromReq } from '@/lib/org';
 
 // GET ?month=YYYY-MM[&code=EMP] -> list adjustments
 export async function GET(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const url = new URL(req.url);
     const month = url.searchParams.get('month');
     const code = url.searchParams.get('code');
@@ -11,6 +13,7 @@ export async function GET(req: Request) {
       .from('payroll_adjustments')
       .select('id, employee_code, month, type, amount, reason, created_at')
       .order('created_at', { ascending: false });
+    if (orgId) q = q.eq('org_id', orgId);
     if (month) q = q.eq('month', month);
     if (code) q = q.eq('employee_code', code);
     const { data, error } = await q;
@@ -24,6 +27,7 @@ export async function GET(req: Request) {
 // POST { employee_code, month, type:'add'|'deduct', amount, reason }
 export async function POST(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const b = await req.json();
     const employee_code = (b.employee_code || '').toString().trim();
     const month = (b.month || '').toString().trim();
@@ -34,7 +38,7 @@ export async function POST(req: Request) {
     }
     const { data, error } = await supabase
       .from('payroll_adjustments')
-      .insert({ employee_code, month, type, amount, reason: b.reason || null })
+      .insert({ employee_code, month, type, amount, reason: b.reason || null, org_id: orgId })
       .select()
       .single();
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 });

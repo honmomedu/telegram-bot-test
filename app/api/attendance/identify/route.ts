@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { orgIdFromReq } from '@/lib/org';
 
 // Face auto-match: given a captured descriptor, find which enrolled employee
 // it belongs to by comparing against every stored face descriptor server-side.
@@ -19,14 +20,15 @@ function euclidean(a: number[], b: number[]): number {
 
 export async function POST(req: Request) {
   try {
+    const orgId = await orgIdFromReq(req);
     const { descriptor } = await req.json();
     if (!Array.isArray(descriptor) || descriptor.length === 0) {
       return NextResponse.json({ matched: false, error: 'Invalid descriptor' }, { status: 400 });
     }
 
-    const { data: faces, error } = await supabase
-      .from('face_enrollments')
-      .select('user_id, name, descriptor');
+    let fq = supabase.from('face_enrollments').select('user_id, name, descriptor');
+    if (orgId) fq = fq.eq('org_id', orgId);
+    const { data: faces, error } = await fq;
 
     if (error || !faces || faces.length === 0) {
       return NextResponse.json({ matched: false, reason: 'no-enrollments' });
@@ -47,11 +49,9 @@ export async function POST(req: Request) {
     // Confirm the matched code maps to an active employee (best effort).
     let name = best.name;
     try {
-      const { data: emp } = await supabase
-        .from('employees')
-        .select('name, active')
-        .eq('code', best.code)
-        .single();
+      let eq = supabase.from('employees').select('name, active').eq('code', best.code);
+      if (orgId) eq = eq.eq('org_id', orgId);
+      const { data: emp } = await eq.single();
       if (emp) {
         if (emp.active === false) {
           return NextResponse.json({ matched: false, reason: 'inactive' });

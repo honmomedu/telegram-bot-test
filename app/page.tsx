@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { getFaceDescriptor, matchConfidence } from '@/lib/face';
 import { FaceEnrollment, resolveEnrollment } from '@/lib/faceStore';
 import { ActiveEmployee, getActiveEmployee, clearActiveEmployee } from '@/lib/employeeStore';
+import { initOrgContext } from '@/lib/orgClient';
 
 const MapComponent = dynamic(() => import('../components/Map'), { ssr: false });
 const FaceEnroll = dynamic(() => import('../components/FaceEnroll'), { ssr: false });
@@ -90,6 +91,7 @@ export default function App() {
   // Real-time clock update & initial data load
   useEffect(() => {
     setIsClient(true);
+    initOrgContext(); // scope all API calls to this org (from ?org=)
 
     // Telegram Web App ready (identity comes from Employee ID, not Telegram)
     if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {

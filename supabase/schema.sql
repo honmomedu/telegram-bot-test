@@ -123,3 +123,39 @@ CREATE INDEX IF NOT EXISTS idx_manual_hours_code ON manual_hours(employee_code);
 
 -- 007 — Weekly schedule (part-time) -------------------------
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS work_schedule JSONB;
+
+-- 008 — Multi-tenancy (organizations + org_id) --------------
+CREATE TABLE IF NOT EXISTS organizations (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  admin_password TEXT,
+  active BOOLEAN DEFAULT TRUE,
+  geofence JSONB,
+  payroll JSONB,
+  qr_secret TEXT,
+  attendance_methods JSONB DEFAULT '{"face":true,"office_qr":true,"qr_card":false,"nfc":false,"manual":false}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+INSERT INTO organizations (slug, name) VALUES ('default', 'ស្ថាប័នដើម (Default)') ON CONFLICT (slug) DO NOTHING;
+
+ALTER TABLE employees           ADD COLUMN IF NOT EXISTS org_id UUID;
+ALTER TABLE attendance          ADD COLUMN IF NOT EXISTS org_id UUID;
+ALTER TABLE face_enrollments    ADD COLUMN IF NOT EXISTS org_id UUID;
+ALTER TABLE payroll_adjustments ADD COLUMN IF NOT EXISTS org_id UUID;
+ALTER TABLE manual_hours        ADD COLUMN IF NOT EXISTS org_id UUID;
+
+UPDATE employees           SET org_id = (SELECT id FROM organizations WHERE slug='default') WHERE org_id IS NULL;
+UPDATE attendance          SET org_id = (SELECT id FROM organizations WHERE slug='default') WHERE org_id IS NULL;
+UPDATE face_enrollments    SET org_id = (SELECT id FROM organizations WHERE slug='default') WHERE org_id IS NULL;
+UPDATE payroll_adjustments SET org_id = (SELECT id FROM organizations WHERE slug='default') WHERE org_id IS NULL;
+UPDATE manual_hours        SET org_id = (SELECT id FROM organizations WHERE slug='default') WHERE org_id IS NULL;
+
+ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_code_key;
+CREATE UNIQUE INDEX IF NOT EXISTS employees_org_code_key ON employees(org_id, code);
+ALTER TABLE face_enrollments DROP CONSTRAINT IF EXISTS face_enrollments_pkey;
+CREATE UNIQUE INDEX IF NOT EXISTS face_enroll_org_user_key ON face_enrollments(org_id, user_id);
+ALTER TABLE manual_hours DROP CONSTRAINT IF EXISTS manual_hours_employee_code_work_date_key;
+CREATE UNIQUE INDEX IF NOT EXISTS manual_hours_org_code_date_key ON manual_hours(org_id, employee_code, work_date);
+CREATE INDEX IF NOT EXISTS idx_employees_org ON employees(org_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_org ON attendance(org_id);

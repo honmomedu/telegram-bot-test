@@ -4,20 +4,27 @@ import {
   buildReport, computeSalary, monthRange, AttendanceReport, SalaryResult,
 } from './payroll';
 
-export async function loadSettings(): Promise<PayrollSettings> {
+// All loaders are scoped to an organization (org_id). Payroll settings live
+// in organizations.payroll (JSONB).
+
+export async function loadSettings(orgId?: string | null): Promise<PayrollSettings> {
   try {
-    const { data } = await supabase.from('payroll_settings').select('*').eq('id', 1).single();
-    if (data) return { ...DEFAULT_SETTINGS, ...data };
+    if (orgId) {
+      const { data } = await supabase.from('organizations').select('payroll').eq('id', orgId).single();
+      if (data?.payroll) return { ...DEFAULT_SETTINGS, ...data.payroll };
+    }
   } catch { /* ignore */ }
   return { ...DEFAULT_SETTINGS };
 }
 
-export async function loadEmployees(): Promise<EmployeeLite[]> {
+export async function loadEmployees(orgId?: string | null): Promise<EmployeeLite[]> {
   try {
-    const { data } = await supabase
+    let q = supabase
       .from('employees')
       .select('code, name, department, pay_type, base_salary, hourly_rate, work_schedule, telegram_id, active')
       .order('code');
+    if (orgId) q = q.eq('org_id', orgId);
+    const { data } = await q;
     return (data || []).filter((e: any) => e.active !== false) as EmployeeLite[];
   } catch {
     return [];
@@ -25,19 +32,21 @@ export async function loadEmployees(): Promise<EmployeeLite[]> {
 }
 
 /** Fetch ALL attendance rows for a month, paginating past the 1000-row cap. */
-export async function loadAttendanceForMonth(month: string): Promise<AttRecord[]> {
+export async function loadAttendanceForMonth(month: string, orgId?: string | null): Promise<AttRecord[]> {
   const { start, end } = monthRange(month);
   const out: AttRecord[] = [];
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {
     try {
-      const { data, error } = await supabase
+      let q = supabase
         .from('attendance')
         .select('employee_code, type, created_at')
         .gte('created_at', start)
         .lt('created_at', end)
         .order('created_at', { ascending: true })
         .range(from, from + PAGE - 1);
+      if (orgId) q = q.eq('org_id', orgId);
+      const { data, error } = await q;
       if (error || !data || data.length === 0) break;
       out.push(...(data as AttRecord[]));
       if (data.length < PAGE) break;
@@ -48,13 +57,15 @@ export async function loadAttendanceForMonth(month: string): Promise<AttRecord[]
   return out;
 }
 
-export async function loadManualHours(month: string): Promise<Map<string, Map<string, ManualHour>>> {
+export async function loadManualHours(month: string, orgId?: string | null): Promise<Map<string, Map<string, ManualHour>>> {
   const map = new Map<string, Map<string, ManualHour>>();
   try {
-    const { data } = await supabase
+    let q = supabase
       .from('manual_hours')
       .select('employee_code, work_date, hours, note')
       .like('work_date', `${month}-%`);
+    if (orgId) q = q.eq('org_id', orgId);
+    const { data } = await q;
     for (const m of data || []) {
       const inner = map.get(m.employee_code) || new Map<string, ManualHour>();
       inner.set(m.work_date, { hours: Number(m.hours || 0), note: m.note });
@@ -64,13 +75,15 @@ export async function loadManualHours(month: string): Promise<Map<string, Map<st
   return map;
 }
 
-export async function loadAdjustments(month: string): Promise<Map<string, Adjustment[]>> {
+export async function loadAdjustments(month: string, orgId?: string | null): Promise<Map<string, Adjustment[]>> {
   const map = new Map<string, Adjustment[]>();
   try {
-    const { data } = await supabase
+    let q = supabase
       .from('payroll_adjustments')
       .select('employee_code, type, amount, reason')
       .eq('month', month);
+    if (orgId) q = q.eq('org_id', orgId);
+    const { data } = await q;
     for (const a of data || []) {
       const list = map.get(a.employee_code) || [];
       list.push({ type: a.type, amount: a.amount, reason: a.reason });
@@ -86,14 +99,14 @@ export interface PayrollRow {
   salary: SalaryResult;
 }
 
-/** Build the full payroll report for a month (all active employees). */
-export async function buildPayrollReport(month: string): Promise<{ rows: PayrollRow[]; settings: PayrollSettings }> {
+/** Build the full payroll report for a month (all active employees in the org). */
+export async function buildPayrollReport(month: string, orgId?: string | null): Promise<{ rows: PayrollRow[]; settings: PayrollSettings }> {
   const [settings, employees, attendance, adjMap, manualMap] = await Promise.all([
-    loadSettings(),
-    loadEmployees(),
-    loadAttendanceForMonth(month),
-    loadAdjustments(month),
-    loadManualHours(month),
+    loadSettings(orgId),
+    loadEmployees(orgId),
+    loadAttendanceForMonth(month, orgId),
+    loadAdjustments(month, orgId),
+    loadManualHours(month, orgId),
   ]);
 
   const byEmp = new Map<string, AttRecord[]>();
