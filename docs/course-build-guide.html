@@ -119,6 +119,7 @@
     <ol>
       <li><a href="#overview">ទិដ្ឋភាពទូទៅ · Overview</a></li>
       <li><a href="#stack">បច្ចេកវិទ្យា · Tech Stack</a></li>
+      <li><a href="#diagram">ដ្យាក្រាម · Architecture Diagram</a></li>
       <li><a href="#flow">Flow ការងារ · System Flow</a></li>
       <li><a href="#methods">វិធីចុះវត្តមាន ៥ · 5 Methods</a></li>
       <li><a href="#prompts">Prompts (Module 1–13)</a></li>
@@ -126,7 +127,7 @@
       <li><a href="#github">GitHub</a></li>
       <li><a href="#vercel">Deploy · Vercel</a></li>
       <li><a href="#env">Env Variables</a></li>
-      <li><a href="#teach">គន្លឹះបង្រៀន · Teaching Tips</a></li>
+      <li><a href="#exercises">លំហាត់ · Exercises</a></li>
     </ol>
   </div>
 
@@ -158,6 +159,86 @@
       <tr><td>Bot</td><td>Telegraf (Telegram Bot)</td></tr>
       <tr><td>Deploy</td><td>GitHub → Vercel (auto-deploy) + Vercel Cron</td></tr>
     </table>
+  </section>
+
+  <!-- DIAGRAM -->
+  <section id="diagram">
+    <h2><span class="n">▦</span> ដ្យាក្រាមស្ថាបត្យកម្ម · Architecture Diagram</h2>
+    <p class="lead">រូបភាពសង្ខេបពីរបៀបដែលផ្នែកនីមួយៗភ្ជាប់គ្នា។ How the pieces connect.</p>
+    <div style="background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;overflow-x:auto;box-shadow:0 8px 24px -18px rgba(79,70,229,.4)">
+      <svg viewBox="0 0 860 470" width="100%" style="min-width:680px" xmlns="http://www.w3.org/2000/svg" font-family="'Kantumruy Pro','Inter',sans-serif">
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#4f46e5"/><stop offset="1" stop-color="#8b5cf6"/>
+          </linearGradient>
+          <marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L8,3 L0,6 Z" fill="#94a3b8"/>
+          </marker>
+        </defs>
+        <style>
+          .box{rx:14;}
+          .lbl{font-size:14px;font-weight:700;fill:#0f172a}
+          .sub{font-size:11px;fill:#64748b}
+          .wt{fill:#fff}.wts{fill:rgba(255,255,255,.85)}
+          .edge{stroke:#94a3b8;stroke-width:2;fill:none}
+          .etxt{font-size:10.5px;fill:#64748b}
+        </style>
+
+        <!-- Clients -->
+        <rect x="20" y="60" width="180" height="70" rx="14" fill="#eef2ff" stroke="#c7d2fe"/>
+        <text x="110" y="90" text-anchor="middle" class="lbl">📱 App បុគ្គលិក</text>
+        <text x="110" y="110" text-anchor="middle" class="sub">Face · QR · NFC · GPS</text>
+
+        <rect x="20" y="160" width="180" height="70" rx="14" fill="#eef2ff" stroke="#c7d2fe"/>
+        <text x="110" y="190" text-anchor="middle" class="lbl">🖥️ Kiosk</text>
+        <text x="110" y="210" text-anchor="middle" class="sub">USB NFC/RFID reader</text>
+
+        <rect x="20" y="290" width="180" height="70" rx="14" fill="#f5f3ff" stroke="#ddd6fe"/>
+        <text x="110" y="320" text-anchor="middle" class="lbl">🏢 Owner</text>
+        <text x="110" y="340" text-anchor="middle" class="sub">គ្រប់គ្រងស្ថាប័ន</text>
+
+        <!-- API core -->
+        <rect x="330" y="150" width="200" height="120" rx="16" fill="url(#g)"/>
+        <text x="430" y="195" text-anchor="middle" class="lbl wt" font-size="16">⚡ Next.js API</text>
+        <text x="430" y="218" text-anchor="middle" class="wts" font-size="11">Serverless (Vercel)</text>
+        <text x="430" y="240" text-anchor="middle" class="wts" font-size="11">scope តាម org_id</text>
+
+        <!-- Supabase -->
+        <rect x="660" y="70" width="180" height="80" rx="14" fill="#ecfdf5" stroke="#a7f3d0"/>
+        <text x="750" y="100" text-anchor="middle" class="lbl">🗄️ Supabase</text>
+        <text x="750" y="120" text-anchor="middle" class="sub">Postgres · employees,</text>
+        <text x="750" y="135" text-anchor="middle" class="sub">attendance, payroll...</text>
+
+        <!-- Telegram -->
+        <rect x="660" y="200" width="180" height="70" rx="14" fill="#eff6ff" stroke="#bfdbfe"/>
+        <text x="750" y="230" text-anchor="middle" class="lbl">📨 Telegram Bot</text>
+        <text x="750" y="250" text-anchor="middle" class="sub">ក្រុម + DM ផ្ទាល់</text>
+
+        <!-- Organizations -->
+        <rect x="660" y="300" width="180" height="70" rx="14" fill="#fdf4ff" stroke="#f5d0fe"/>
+        <text x="750" y="330" text-anchor="middle" class="lbl">🏬 organizations</text>
+        <text x="750" y="350" text-anchor="middle" class="sub">config + methods/org</text>
+
+        <!-- edges clients -> API -->
+        <path class="edge" d="M200,95 C270,95 280,200 330,200" marker-end="url(#arr)"/>
+        <path class="edge" d="M200,195 C260,195 280,210 330,210" marker-end="url(#arr)"/>
+        <path class="edge" d="M200,325 C270,325 300,250 330,240" marker-end="url(#arr)"/>
+
+        <!-- API -> services -->
+        <path class="edge" d="M530,185 C600,185 600,120 660,115" marker-end="url(#arr)"/>
+        <text x="560" y="140" class="etxt">read/write</text>
+        <path class="edge" d="M530,225 C600,225 600,232 660,232" marker-end="url(#arr)"/>
+        <text x="560" y="218" class="etxt">notify</text>
+        <path class="edge" d="M530,245 C600,260 600,330 660,332" marker-end="url(#arr)"/>
+        <text x="560" y="300" class="etxt">org config</text>
+
+        <!-- title chips -->
+        <text x="110" y="40" text-anchor="middle" class="sub" font-weight="700">CLIENTS</text>
+        <text x="430" y="40" text-anchor="middle" class="sub" font-weight="700">BACKEND</text>
+        <text x="750" y="40" text-anchor="middle" class="sub" font-weight="700">SERVICES / DATA</text>
+      </svg>
+    </div>
+    <p class="lead" style="margin-top:12px">📍 ចំណុចសំខាន់៖ <b>គ្រប់ការស្នើ scope តាម org_id</b> (cookie <span class="mono">?org=slug</span>) → ស្ថាប័ននីមួយៗឃើញតែទិន្នន័យខ្លួនឯង។ Server កត់ត្រាដោយ <b>server timestamp</b>។</p>
   </section>
 
   <!-- FLOW -->
@@ -488,17 +569,43 @@ git push -u origin main</pre>
     </table>
   </section>
 
-  <!-- TEACH -->
-  <section id="teach">
-    <h2><span class="n">🎓</span> គន្លឹះបង្រៀន · Teaching Tips</h2>
+  <!-- EXERCISES -->
+  <section id="exercises">
+    <h2><span class="n">✍</span> លំហាត់សិក្ខាកាម · Exercises</h2>
+    <p class="lead">ធ្វើតាមលំដាប់ ដើម្បីយល់ និងស្ទាត់ជំនាញ។ Do these in order to build mastery.</p>
+
+    <h3>កម្រិត ១ — មូលដ្ឋាន · Level 1: Basics</h3>
     <ul class="flow">
-      <li><b>បង្រៀនតាម Module</b>៖ មួយ module = មួយ session។ ឱ្យសិក្ខាកាម copy prompt → មើលលទ្ធផល → ពន្យល់កូដ។</li>
-      <li><b>ចាប់ផ្ដើមពី Flow</b>៖ គូរ flow (បុគ្គលិក → API → Supabase → Telegram) លើក្ដារខៀនមុន code។</li>
-      <li><b>បញ្ជាក់ "ហេតុអ្វី"</b>៖ ឧ. ហេតុអ្វី server timestamp (ការពារបន្លំម៉ោង), ហេតុអ្វី org_id (ការពារទិន្នន័យលាយ)។</li>
-      <li><b>Demo ជាក់ស្ដែង</b>៖ ឱ្យសិក្ខាកាមចុះវត្តមានពិត (face/QR/NFC) → មើល Telegram notification ភ្លាមៗ។</li>
-      <li><b>លំហាត់</b>៖ ឱ្យសិក្ខាកាមបន្ថែមមុខងារ ១ (ឧ. PDF payslip, charts) ដោយ prompt ផ្ទាល់ខ្លួន។</li>
+      <li>ប្រើ <b>Master Prompt + Module 1</b> បង្កើតគម្រោង → ដាក់ឈ្មោះស្ថាប័នផ្ទាល់ខ្លួន និងប្ដូរពណ៌ gradient។</li>
+      <li>ភ្ជាប់ <b>Supabase</b> ផ្ទាល់ខ្លួន → run <span class="mono">schema.sql</span> → ផ្ទៀងផ្ទាត់ថា table ត្រូវបង្កើត។</li>
+      <li>ធ្វើ <b>Module 2 (GPS)</b> → កំណត់ទីតាំងសាលា/ការិយាល័យរបស់អ្នក → សាកចូល/ចេញ។</li>
     </ul>
-    <div class="note">💡 ស្នើ៖ ឱ្យសិក្ខាកាមម្នាក់ៗបង្កើត org ផ្ទាល់ខ្លួនក្នុង /owner → សាក multi-tenant ឱ្យឃើញទិន្នន័យដាច់ដោយឡែក។</div>
+
+    <h3>កម្រិត ២ — មុខងារសំខាន់ · Level 2: Core Features</h3>
+    <ul class="flow">
+      <li>ធ្វើ <b>Module 3 (Face) + 5 (Identity)</b> → បង្កើតបុគ្គលិក ១ នាក់ → ចុះឈ្មោះមុខ → ចុះវត្តមានដោយមុខ។</li>
+      <li>ធ្វើ <b>Module 6 (Telegram)</b> → បង្កើត bot ពី BotFather → សាក <span class="mono">/link</span> → ឃើញ DM ពេលចុះវត្តមាន។</li>
+      <li>ធ្វើ <b>Module 8 (Payroll)</b> → កំណត់ប្រាក់ខែ → បង្កើតរបាយការណ៍ខែ → ផ្ញើ Payslip សាក។</li>
+    </ul>
+
+    <h3>កម្រិត ៣ — កម្រិតខ្ពស់ · Level 3: Advanced</h3>
+    <ul class="flow">
+      <li>ធ្វើ <b>Module 10 (Multi-tenant)</b> → បង្កើត <b>ស្ថាប័ន ២</b> ក្នុង <span class="mono">/owner</span> → ផ្ទៀងផ្ទាត់ថាទិន្នន័យ <b>ដាច់ដោយឡែក</b>។</li>
+      <li>ធ្វើ <b>Module 11 + 12 (Card + Kiosk)</b> → ព្រីនកាត QR → បើក <span class="mono">/kiosk</span> → សាកស្កេន។</li>
+      <li><b>Deploy</b> ពេញលេញ៖ push GitHub → Vercel → ដាក់ env → ចែក link ឱ្យមិត្តភក្ដិសាកប្រើ។</li>
+    </ul>
+
+    <h3>សំណួរពិនិត្យ · Check-your-understanding</h3>
+    <ol style="padding-left:20px">
+      <li>ហេតុអ្វីយើងប្រើ <b>server timestamp</b> មិនមែនម៉ោងទូរស័ព្ទ?</li>
+      <li><b>org_id</b> ជួយអ្វីក្នុង multi-tenant? បើគ្មានវានឹងមានបញ្ហាអ្វី?</li>
+      <li>តើ <b>Face auto-match</b> ខុសពី <b>QR card</b> យ៉ាងណា ខាងអត្តសញ្ញាណ?</li>
+      <li>ហេតុអ្វី <b>NFC web</b> ដំណើរការតែ Android? ដំណោះស្រាយសម្រាប់កុំព្យូទ័រគឺអ្វី?</li>
+      <li>ហេតុអ្វីត្រូវ <b>paginate</b> query? "1000 rows" ពិតជា limit នៃ storage ឬទេ?</li>
+    </ol>
+
+    <h3>បញ្ហាប្រកួត · Challenge</h3>
+    <div class="ok">🏆 បន្ថែមមុខងារ <b>ដោយ prompt ផ្ទាល់ខ្លួន</b> មួយ ឧ.៖ ប័ណ្ណប្រាក់ខែ <b>PDF</b>, ផ្ទាំង <b>charts ស្ថិតិ</b>, ឬ <b>ច្បាប់ឈប់សម្រាក (Leave request)</b>។ សរសេរ prompt ខ្លួនឯងជាខ្មែរ ឬ English។</div>
   </section>
 
   <footer>
