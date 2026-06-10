@@ -77,6 +77,14 @@
   pre{background:var(--code);color:#e2e8f0;border-radius:12px;padding:16px 18px;overflow-x:auto;font-size:13.5px;
     line-height:1.65;margin:0 0 6px;white-space:pre-wrap;word-break:break-word}
   pre.km{color:#f1f5f9}
+  .code-wrap{position:relative}
+  .code-wrap pre{padding-top:42px}
+  .copy-btn{position:absolute;top:8px;right:8px;background:rgba(255,255,255,.12);color:#e2e8f0;
+    border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;
+    cursor:pointer;font-family:'Kantumruy Pro','Inter',sans-serif;display:flex;align-items:center;gap:5px;transition:.15s}
+  .copy-btn:hover{background:rgba(255,255,255,.24)}
+  .copy-btn.done{background:#10b981;border-color:#10b981;color:#fff}
+  @media print{.copy-btn{display:none}.code-wrap pre{padding-top:16px}}
 
   .note{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:12px;padding:12px 16px;margin:14px 0;font-size:14px}
   .ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:12px;padding:12px 16px;margin:14px 0;font-size:14px}
@@ -322,7 +330,7 @@ All APIs persist to Supabase; deploy on Vercel. Keep the database schema.sql ins
       <div class="head"><div class="tag">1</div><div><b>គ្រឹះ + Branding · Foundation</b><small>Next.js init, Tailwind, Khmer font, ទំព័រដើម</small></div></div>
       <div class="body">
         <div class="lng"><span class="flag">🇰🇭</span> ខ្មែរ</div>
-        <pre class="km">បង្កើតគម្រោង Next.js 15 ដំបូង។ ដាក់ font Kantumruy Pro តាម next/font។ កំណត់ metadata ឈ្មោះ "SecureAttend"។
+        <pre class="km">ជាដំបូង បង្កើតគម្រោងដោយប្រើ Next.js (version 15)។ ដាក់ font Kantumruy Pro តាម next/font។ កំណត់ metadata ឈ្មោះ "SecureAttend"។
 បង្កើតទំព័រដើម (app/page.tsx) មាន៖ header gradient មាន logo, នាឡិកា real-time, និងផ្ទាំងបង្ហាញ "សួស្តី" ឈ្មោះម្ចាស់គណនី។
 ដាក់ design tokens (ពណ៌ brand, gradient, shadow) ក្នុង globals.css។</pre>
         <div class="lng"><span class="flag">🇬🇧</span> English</div>
@@ -614,5 +622,40 @@ git push -u origin main</pre>
   </footer>
 
 </div>
+
+<script>
+  // Add a Copy button to every code/prompt block
+  document.querySelectorAll('pre').forEach(function (pre) {
+    var wrap = document.createElement('div');
+    wrap.className = 'code-wrap';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
+
+    var btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.type = 'button';
+    btn.innerHTML = '⧉ Copy';
+    btn.addEventListener('click', function () {
+      var text = pre.innerText;
+      var done = function () {
+        btn.classList.add('done');
+        btn.innerHTML = '✓ បានចម្លង';
+        setTimeout(function () { btn.classList.remove('done'); btn.innerHTML = '⧉ Copy'; }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text); done(); });
+      } else { fallback(text); done(); }
+    });
+    wrap.appendChild(btn);
+  });
+
+  function fallback(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+</script>
 </body>
 </html>
